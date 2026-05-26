@@ -1,0 +1,1291 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import {
+  ReactFlow,
+  MiniMap,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  Connection,
+  Edge,
+  Node,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { useAuthStore } from '../../../store/authStore';
+import { useTreeStore, Person, Relationship } from '../../../store/treeStore';
+import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users } from 'lucide-react';
+import PersonNode from '../../components/PersonNode';
+
+export default function TreeWorkspacePage() {
+  const { id } = useParams() as { id: string };
+  const { token, initialize, isAuthenticated, user } = useAuthStore();
+  const {
+    activeTree,
+    fetchTreeDetail,
+    addPerson,
+    updatePerson,
+    deletePerson,
+    addRelationship,
+    deleteRelationship,
+    addCustomField,
+    collaborators,
+    activities,
+    comments,
+    fetchCollaborators,
+    shareTree,
+    removeCollaborator,
+    fetchActivities,
+    fetchComments,
+    addComment,
+    deleteComment,
+    loading,
+  } = useTreeStore();
+
+  const router = useRouter();
+
+  // State for Canvas Nodes & Edges
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  // Modals & Panels State
+  const [showPersonModal, setShowPersonModal] = useState(false);
+  const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+  const [showRelationModal, setShowRelationModal] = useState(false);
+  const [showFieldModal, setShowFieldModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  const [submittingPerson, setSubmittingPerson] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showTips, setShowTips] = useState(true);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+
+  // Comments / Notes Form State
+  const [commentContent, setCommentContent] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Invite Collaborator Form State
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<'viewer' | 'editor'>('viewer');
+  const [inviting, setInviting] = useState(false);
+
+  // New Person Form State
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
+  const [birthDate, setBirthDate] = useState('');
+  const [deathDate, setDeathDate] = useState('');
+  const [biography, setBiography] = useState('');
+  const [dynamicData, setDynamicData] = useState<Record<string, any>>({});
+
+  // New Relation Form State
+  const [personA, setPersonA] = useState('');
+  const [personB, setPersonB] = useState('');
+  const [relationType, setRelationType] = useState<'parent' | 'spouse' | 'sibling' | 'adopted'>('spouse');
+
+  // New Custom Field State
+  const [fieldName, setFieldName] = useState('');
+  const [fieldType, setFieldType] = useState<'text' | 'date' | 'dropdown' | 'tag'>('text');
+
+  // React Flow custom node mappings
+  const nodeTypes = useMemo(() => ({
+    personNode: PersonNode
+  }), []);
+
+  // Initialize Authentication & Fetch Details
+  useEffect(() => {
+    initialize();
+
+    // Load persisted theme
+    const savedTheme = localStorage.getItem('kinova_theme');
+    if (savedTheme !== null) {
+      setIsDarkMode(savedTheme === 'dark');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    if (!isAuthenticated && !localStorage.getItem('auth_token')) {
+      router.push('/login');
+    } else if (token && id) {
+      fetchTreeDetail(token, id);
+    }
+  }, [isAuthenticated, token, id]);
+
+  // Open EventSource SSE stream for real-time collaborative updates!
+  useEffect(() => {
+    if (!token || !id) return;
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const eventSource = new EventSource(`${API_URL}/api/trees/${id}/stream?token=${token}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'tree_changed') {
+          fetchTreeDetail(token, id);
+          fetchActivities(token, id);
+        } else if (data.event === 'collaborators_changed') {
+          fetchCollaborators(token, id);
+        } else if (data.event === 'comments_changed' && selectedPerson && selectedPerson.id === data.person_id) {
+          fetchComments(token, selectedPerson.id);
+          fetchActivities(token, id);
+        }
+      } catch (err) {
+        // Quietly fail or log
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [id, token, selectedPerson]);
+
+  useEffect(() => {
+    if (token && id) {
+      fetchCollaborators(token, id);
+      fetchActivities(token, id);
+    }
+  }, [token, id]);
+
+  useEffect(() => {
+    if (token && selectedPerson) {
+      fetchComments(token, selectedPerson.id);
+    }
+  }, [token, selectedPerson]);
+
+  // Sync activeTree data to React Flow Nodes & Edges
+  useEffect(() => {
+    if (!activeTree) return;
+
+    // Map Persons to React Flow Nodes
+    const flowNodes: Node[] = activeTree.persons.map((person) => ({
+      id: person.id,
+      type: 'personNode',
+      position: { x: person.ui_metadata?.x || 100, y: person.ui_metadata?.y || 100 },
+      data: {
+        person,
+        onEdit: handleEditPersonClick,
+        onDelete: handleDeletePersonClick,
+        isDarkMode,
+      },
+    }));
+
+    // Map Relationships to React Flow Edges
+    const flowEdges: Edge[] = activeTree.relationships.map((rel) => {
+      let strokeColor = isDarkMode ? '#818cf8' : '#6366f1'; // Default Parent/Child: Indigo
+      let strokeDash = '0';
+      let animated = false;
+      
+      if (rel.relation_type === 'spouse') {
+        strokeColor = isDarkMode ? '#f472b6' : '#db2777'; // Spouse: Pink
+        strokeDash = '4 4';
+      } else if (rel.relation_type === 'sibling') {
+        strokeColor = isDarkMode ? '#34d399' : '#10b981'; // Sibling: Emerald
+        strokeDash = '2 2';
+      } else if (rel.relation_type === 'parent') {
+        strokeColor = isDarkMode ? '#818cf8' : '#6366f1'; // Parent: Indigo
+        animated = true;
+      } else if (rel.relation_type === 'adopted') {
+        strokeColor = isDarkMode ? '#a78bfa' : '#8b5cf6'; // Adopted: Purple/Violet
+        strokeDash = '3 3';
+      }
+
+      return {
+        id: rel.id,
+        source: rel.person_a,
+        target: rel.person_b,
+        sourceHandle: rel.relation_type === 'spouse' ? 'partner-left' : 'child-out',
+        targetHandle: rel.relation_type === 'spouse' ? 'partner-right' : 'parent-in',
+        animated,
+        style: { stroke: strokeColor, strokeWidth: 1.5 }, // Thin minimalist custom colors
+        type: 'smoothstep',
+      };
+    });
+
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+  }, [activeTree, isDarkMode]);
+
+  // Handle Drag & Drop Nodes coordinate persistence
+  const onNodeDragStop = useCallback(
+    (event: any, node: Node) => {
+      if (!token) return;
+      const person = activeTree?.persons.find((p) => p.id === node.id);
+      if (!person) return;
+
+      const updatedUi = {
+        ...person.ui_metadata,
+        x: node.position.x,
+        y: node.position.y,
+      };
+
+      // Call API directly in background to save coordinates
+      updatePerson(token, node.id, { ui_metadata: updatedUi });
+    },
+    [activeTree, token]
+  );
+
+  // Connection Handler (Drawing relationship lines directly on canvas!)
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      setPersonA(connection.source);
+      setPersonB(connection.target);
+      setRelationType('spouse');
+      setShowRelationModal(true);
+    },
+    [token]
+  );
+
+  // Edge Deletion Handler (When user clicks a line and presses Backspace/Delete on keyboard)
+  const onEdgesDelete = useCallback(
+    (edgesToDelete: Edge[]) => {
+      if (!token) return;
+      edgesToDelete.forEach((edge) => {
+        deleteRelationship(token, edge.id);
+      });
+    },
+    [token]
+  );
+
+  // Toggle Theme & Persist in LocalStorage
+  const toggleTheme = useCallback(() => {
+    setIsDarkMode((prev) => {
+      const next = !prev;
+      localStorage.setItem('kinova_theme', next ? 'dark' : 'light');
+      return next;
+    });
+  }, []);
+
+  // Handle Node click to load sliding details Drawer
+  const onNodeClick = useCallback(
+    (event: any, node: Node) => {
+      const person = activeTree?.persons.find((p) => p.id === node.id);
+      if (person) {
+        setSelectedPerson(person);
+        setShowHistoryDrawer(false);
+      }
+    },
+    [activeTree]
+  );
+
+  // Edit Person Click
+  const handleEditPersonClick = (person: Person) => {
+    setEditingPerson(person);
+    setFirstName(person.first_name);
+    setLastName(person.last_name || '');
+    setGender(person.gender);
+    setBirthDate(person.birth_date ? person.birth_date.split('T')[0] : '');
+    setDeathDate(person.death_date ? person.death_date.split('T')[0] : '');
+    setBiography(person.biography || '');
+    setDynamicData(person.dynamic_data || {});
+    setShowPersonModal(true);
+  };
+
+  // Delete Person
+  const handleDeletePersonClick = (personId: string) => {
+    if (!token) return;
+    if (confirm('Are you sure you want to remove this family member and all their relationships?')) {
+      deletePerson(token, personId);
+    }
+  };
+
+  // Form submits
+  const handlePersonSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !id || submittingPerson) return;
+    setSubmittingPerson(true);
+
+    try {
+      const payload = {
+        tree_id: id,
+        first_name: firstName,
+        last_name: lastName || null,
+        gender,
+        birth_date: birthDate || null,
+        death_date: deathDate || null,
+        biography: biography || null,
+        dynamic_data: dynamicData,
+        ui_metadata: editingPerson?.ui_metadata ?? {
+          x: Math.random() * 300 + 100,
+          y: Math.random() * 300 + 100,
+        },
+      };
+
+      if (editingPerson) {
+        await updatePerson(token, editingPerson.id, payload as any);
+      } else {
+        await addPerson(token, payload as any);
+      }
+
+      // Reset Form
+      setEditingPerson(null);
+      setFirstName('');
+      setLastName('');
+      setGender('male');
+      setBirthDate('');
+      setDeathDate('');
+      setBiography('');
+      setDynamicData({});
+      setShowPersonModal(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmittingPerson(false);
+    }
+  };
+
+  const handleRelationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !id || !personA || !personB) return;
+
+    try {
+      await addRelationship(token, {
+        tree_id: id,
+        person_a: personA,
+        person_b: personB,
+        relation_type: relationType,
+      });
+      setShowRelationModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to create connection');
+    }
+  };
+
+  const handleFieldSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !id || !fieldName) return;
+
+    await addCustomField(token, id, fieldName.trim().toLowerCase().replace(' ', '_'), fieldType);
+    setFieldName('');
+    setShowFieldModal(false);
+  };
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !id || !inviteEmail.trim() || inviting) return;
+    setInviting(true);
+    try {
+      await shareTree(token, {
+        tree_id: id,
+        email: inviteEmail.trim(),
+        role: inviteRole,
+      });
+      setInviteEmail('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to share tree access');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !selectedPerson || !commentContent.trim() || submittingComment) return;
+    setSubmittingComment(true);
+    try {
+      await addComment(token, {
+        person_id: selectedPerson.id,
+        content: commentContent.trim(),
+      });
+      setCommentContent('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to add research note');
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  if (loading && !activeTree) {
+    return (
+      <div className={`flex min-h-screen items-center justify-center transition-colors duration-300 ${isDarkMode ? 'dark bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'}`}>
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#7b8e7f] border-t-transparent" />
+      </div>
+    );
+  }
+
+  return (
+    <main className={`flex h-screen w-screen overflow-hidden relative transition-colors duration-300 ${isDarkMode ? 'bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'}`}>
+      {/* Top Navbar */}
+      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
+        <div className={`flex items-center gap-3 pointer-events-auto backdrop-blur border px-4 py-2.5 rounded-xl shadow-xl ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200'}`}>
+          <button
+            onClick={() => router.push('/')}
+            className={`p-2 rounded-lg transition-all ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+          >
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{activeTree?.name || 'Loading Canvas...'}</h1>
+            <p className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Kinova Canvas Workspace</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={() => {
+              setEditingPerson(null);
+              setFirstName('');
+              setLastName('');
+              setGender('male');
+              setBirthDate('');
+              setDeathDate('');
+              setBiography('');
+              setDynamicData({});
+              setShowPersonModal(true);
+            }}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:scale-[1.01] transition-all pointer-events-auto ${
+              isDarkMode
+                ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+            }`}
+          >
+            <UserPlus size={16} />
+            Add Family Member
+          </button>
+
+          <button
+            onClick={toggleTheme}
+            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
+              isDarkMode
+                ? 'bg-slate-900/90 border-white/10 text-amber-400 hover:bg-slate-800'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+            }`}
+            title="Toggle Light/Dark Mode"
+          >
+            {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          
+          <button
+            onClick={() => setShowFieldModal(true)}
+            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
+              isDarkMode
+                ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+            }`}
+            title="Configure Custom Fields Schema"
+          >
+            <Settings size={18} />
+          </button>
+
+          <button
+            onClick={() => setShowShareModal(true)}
+            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
+              isDarkMode
+                ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+            }`}
+            title="Share tree access"
+          >
+            <Users size={18} />
+          </button>
+
+          <button
+            onClick={() => {
+              setShowHistoryDrawer(true);
+              setShowShareModal(false);
+              setSelectedPerson(null);
+            }}
+            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
+              isDarkMode
+                ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+            }`}
+            title="View modification audit logs"
+          >
+            <History size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Canvas Area */}
+      <div className="flex-1 h-full w-full relative">
+        {loading && (
+          <div className={`absolute inset-0 backdrop-blur-xs flex items-center justify-center z-20 ${isDarkMode ? 'bg-[#121213]/60' : 'bg-[#faf9f6]/60'}`}>
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#7b8e7f] border-t-transparent" />
+          </div>
+        )}
+
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          onNodeDragStop={onNodeDragStop}
+          onEdgesDelete={onEdgesDelete}
+          onNodeClick={onNodeClick}
+          nodeTypes={nodeTypes}
+          fitView
+          className={`transition-colors duration-300 ${isDarkMode ? 'bg-[#121213]' : 'bg-[#faf9f6]'}`}
+        >
+          <Background color={isDarkMode ? '#2c2c2e' : '#e6e5e0'} gap={24} size={1} />
+          <Controls className={`!border-none ${isDarkMode ? '!bg-[#1a1a1c] !text-white [&_button]:!bg-[#1a1a1c] [&_button]:!text-white' : '!bg-white !text-slate-800 [&_button]:!bg-white [&_button]:!text-slate-800 shadow-md border border-slate-200'}`} />
+          <MiniMap className={isDarkMode ? '!bg-[#1a1a1c] !border-white/10' : '!bg-white !border-slate-200 shadow-md'} nodeColor={isDarkMode ? '#2c2c2e' : '#e6e5e0'} />
+        </ReactFlow>
+      </div>
+
+
+
+      {/* Modal: Add/Edit Person (Dynamic Fields Integrated!) */}
+      {showPersonModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className={`w-full max-w-lg p-6 rounded-2xl border shadow-2xl relative transition-all ${isDarkMode ? 'bg-[#1a1a1c] border-[#2c2c2e] text-[#f3f3f5]' : 'bg-white border-[#e6e5e0] text-[#1c1c1e]'}`}>
+            <h3 className={`text-2xl font-serif font-semibold mb-4 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              {editingPerson ? 'Edit Historical Record' : 'Document Family Member'}
+            </h3>
+
+            <form onSubmit={handlePersonSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Gender
+                  </label>
+                  <select
+                    value={gender}
+                    onChange={(e: any) => setGender(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Birth Date
+                  </label>
+                  <input
+                    type="date"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    Death Date
+                  </label>
+                  <input
+                    type="date"
+                    value={deathDate}
+                    onChange={(e) => setDeathDate(e.target.value)}
+                    placeholder="Leave blank if alive"
+                    className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Biography / Historical Context
+                </label>
+                <textarea
+                  value={biography}
+                  onChange={(e) => setBiography(e.target.value)}
+                  rows={2}
+                  className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                    isDarkMode
+                      ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                      : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                  }`}
+                />
+              </div>
+
+              {/* Dynamic Field Form Inputs (Dynamic Schema Engine!) */}
+              {activeTree?.customFields && activeTree.customFields.length > 0 && (
+                <div className={`border-t pt-4 mt-4 space-y-4 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
+                  <h4 className={`text-xs font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#9cb2a2]' : 'text-[#7b8e7f]'}`}>
+                    Custom Metadata Columns
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {activeTree.customFields.map((field) => (
+                      <div key={field.id}>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                          {field.field_name.replace('_', ' ')}
+                        </label>
+                        <input
+                          type={field.field_type === 'date' ? 'date' : 'text'}
+                          value={dynamicData[field.field_name] || ''}
+                          onChange={(e) =>
+                            setDynamicData({
+                              ...dynamicData,
+                              [field.field_name]: e.target.value,
+                            })
+                          }
+                          className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                            isDarkMode
+                              ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                              : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                          }`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className={`flex items-center justify-end gap-3 pt-4 border-t mt-6 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
+                <button
+                  type="button"
+                  disabled={submittingPerson}
+                  onClick={() => setShowPersonModal(false)}
+                  className={`px-4 py-2 rounded-lg border transition-all text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isDarkMode
+                      ? 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
+                      : 'border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingPerson}
+                  className={`px-5 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isDarkMode
+                      ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                      : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                  }`}
+                >
+                  {submittingPerson && (
+                    <div className={`animate-spin rounded-full h-3.5 w-3.5 border-b-2 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`} />
+                  )}
+                  {submittingPerson ? (editingPerson ? 'Saving...' : 'Creating...') : (editingPerson ? 'Save Changes' : 'Create Member')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Relationship Type Selection */}
+      {showRelationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-sm p-6 rounded-2xl border shadow-2xl transition-all ${isDarkMode ? 'bg-[#1a1a1c] border-[#2c2c2e] text-[#f3f3f5]' : 'bg-white border-[#e6e5e0] text-[#1c1c1e]'}`}>
+            <h3 className={`text-xl font-serif font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              Select Relationship Type
+            </h3>
+            <p className="text-xs text-slate-400 mb-6 font-light">
+              Establish a graph connection link between these two family nodes.
+            </p>
+
+            <form onSubmit={handleRelationSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Connection Link
+                </label>
+                <select
+                  value={relationType}
+                  onChange={(e: any) => setRelationType(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                    isDarkMode
+                      ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                      : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                  }`}
+                >
+                  <option value="spouse">Spouse</option>
+                  <option value="parent">Parent</option>
+                  <option value="sibling">Sibling</option>
+                  <option value="adopted">Adopted</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowRelationModal(false)}
+                  className={`px-4 py-2 rounded-lg border transition-all text-xs font-semibold ${
+                    isDarkMode
+                      ? 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
+                      : 'border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`px-5 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm ${
+                    isDarkMode
+                      ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                      : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                  }`}
+                >
+                  Add Relationship
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Custom Fields (Dynamic Schema Configuration!) */}
+      {showFieldModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md p-6 rounded-2xl border shadow-2xl transition-all ${isDarkMode ? 'bg-[#1a1a1c] border-[#2c2c2e] text-[#f3f3f5]' : 'bg-white border-[#e6e5e0] text-[#1c1c1e]'}`}>
+            <h3 className={`text-xl font-serif font-semibold mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+              Configure Custom Field Schema
+            </h3>
+            <p className="text-xs text-slate-400 mb-6 font-light">
+              Add new custom data fields to this specific family silsilah tree (e.g. Clan Name, Origin Marga, Title).
+            </p>
+
+            <form onSubmit={handleFieldSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Field Column Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={fieldName}
+                  onChange={(e) => setFieldName(e.target.value)}
+                  placeholder="e.g. Clan Name"
+                  className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                    isDarkMode
+                      ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                      : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                  Input Type
+                </label>
+                <select
+                  value={fieldType}
+                  onChange={(e: any) => setFieldType(e.target.value)}
+                  className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                    isDarkMode
+                      ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                      : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                  }`}
+                >
+                  <option value="text">Single Line Text</option>
+                  <option value="date">Date picker</option>
+                  <option value="dropdown">Dropdown select list</option>
+                  <option value="tag">Tags collection</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowFieldModal(false)}
+                  className={`px-4 py-2 rounded-lg border transition-all text-xs font-semibold ${
+                    isDarkMode
+                      ? 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
+                      : 'border-slate-200 text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`px-5 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm ${
+                    isDarkMode
+                      ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                      : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                  }`}
+                >
+                  Add Schema Column
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Notion-Inspired sliding Person Detail Sidebar / Drawer */}
+      {selectedPerson && (
+        <aside
+          className={`absolute top-0 right-0 z-30 w-[350px] md:w-[400px] h-full border-l p-8 shadow-2xl overflow-y-auto transition-transform duration-300 flex flex-col justify-between ${
+            isDarkMode
+              ? 'bg-[#18181a] border-[#2c2c2e] text-[#f3f3f5]'
+              : 'bg-[#faf9f6] border-[#e6e5e0] text-[#1c1c1e]'
+          }`}
+        >
+          <div className="space-y-6">
+            {/* Drawer Header */}
+            <div className="flex items-start justify-between border-b pb-5 mb-5 border-slate-200/50 dark:border-white/5">
+              <div className="space-y-1">
+                <span className="text-[9px] uppercase font-bold tracking-widest text-[#7b8e7f] dark:text-[#9cb2a2]">
+                  Ancestor Record
+                </span>
+                <h3 className="text-2xl font-serif font-semibold mt-1 tracking-tight">
+                  {selectedPerson.first_name} {selectedPerson.last_name || ''}
+                </h3>
+                {(selectedPerson.birth_date || selectedPerson.death_date) && (
+                  <p className="text-xs text-slate-400 font-mono tracking-wider mt-1 flex items-center gap-1">
+                    <Clock size={12} />
+                    {selectedPerson.birth_date ? new Date(selectedPerson.birth_date).toLocaleDateString() : '???'} –{' '}
+                    {selectedPerson.death_date ? new Date(selectedPerson.death_date).toLocaleDateString() : selectedPerson.death_date === null ? 'Present' : '???'}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setSelectedPerson(null)}
+                className={`p-1.5 rounded-lg border transition-colors ${
+                  isDarkMode
+                    ? 'border-white/5 text-slate-500 hover:text-white hover:bg-white/5'
+                    : 'border-slate-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Profile Fields section */}
+            <div className="space-y-3.5">
+              <div className="flex justify-between items-center text-xs border-b border-slate-100 dark:border-white/5 pb-2">
+                <span className="text-slate-400 font-medium">Gender</span>
+                <span className="font-semibold capitalize">{selectedPerson.gender}</span>
+              </div>
+
+              {/* Custom schema dynamic fields (Notion list style) */}
+              {selectedPerson.dynamic_data &&
+                Object.entries(selectedPerson.dynamic_data).map(([key, val]) => {
+                  if (!val) return null;
+                  return (
+                    <div key={key} className="flex justify-between items-center text-xs border-b border-slate-100 dark:border-white/5 pb-2">
+                      <span className="text-[#7b8e7f] dark:text-[#9cb2a2] font-semibold capitalize">
+                        {key.replace('_', ' ')}
+                      </span>
+                      <span className="font-semibold">{val}</span>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Biography narrative */}
+            {selectedPerson.biography ? (
+              <div className="space-y-2">
+                <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 flex items-center gap-1">
+                  <AlignLeft size={12} />
+                  Historical Narrative
+                </h4>
+                <p className={`text-xs leading-relaxed font-light whitespace-pre-wrap pl-1 ${
+                  isDarkMode ? 'text-slate-300' : 'text-slate-600'
+                }`}>
+                  "{selectedPerson.biography}"
+                </p>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-white/5 text-center text-slate-400 font-light text-[11px]">
+                No biography logged yet. Click edit on the card to add a historical context narrative.
+              </div>
+            )}
+
+            {/* Archival Milestone Timeline */}
+            <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-white/5">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Clock size={12} />
+                Milestone Timelines
+              </h4>
+              <div className="relative pl-4 border-l border-slate-200 dark:border-[#2c2c2e] space-y-5 text-xs text-slate-400 font-light">
+                {selectedPerson.birth_date && (
+                  <div className="relative">
+                    <span className="absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full bg-[#7b8e7f] dark:bg-[#9cb2a2] border-2 border-[#faf9f6] dark:border-[#18181a]" />
+                    <span className="font-bold text-slate-700 dark:text-white block font-mono">
+                      {new Date(selectedPerson.birth_date).getFullYear()}
+                    </span>
+                    <span className="text-[10px] block mt-0.5">Birth registration logged.</span>
+                  </div>
+                )}
+                {selectedPerson.death_date && (
+                  <div className="relative">
+                    <span className="absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full bg-slate-400 border-2 border-[#faf9f6] dark:border-[#18181a]" />
+                    <span className="font-bold text-slate-700 dark:text-white block font-mono">
+                      {new Date(selectedPerson.death_date).getFullYear()}
+                    </span>
+                    <span className="text-[10px] block mt-0.5">Departed this life. Heritage documentation closed.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Research Notes & Comments */}
+            <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-white/5">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 flex items-center gap-1.5">
+                <MessageSquare size={12} />
+                Research Discussion
+              </h4>
+              
+              {/* Comments list */}
+              <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                {comments && comments.length > 0 ? (
+                  comments.map((comment: any) => (
+                    <div
+                      key={comment.id}
+                      className={`p-3 rounded-xl border relative group transition-all ${
+                        isDarkMode
+                          ? 'bg-[#1e1e20] border-[#2c2c2e] text-slate-300'
+                          : 'bg-[#fafaf9] border-[#e6e5e0] text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold uppercase ${
+                            isDarkMode ? 'bg-[#2c2c2e] text-slate-300' : 'bg-slate-200 text-slate-750'
+                          }`}>
+                            {comment.user?.name ? comment.user.name[0] : 'U'}
+                          </div>
+                          <span className={`text-[10px] font-semibold ${isDarkMode ? 'text-white' : 'text-slate-800'}`}>
+                            {comment.user?.name || 'Unknown User'}
+                          </span>
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          {new Date(comment.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      <p className="text-[11px] leading-relaxed font-light whitespace-pre-wrap break-words pl-1.5">
+                        {comment.content}
+                      </p>
+
+                      {/* Delete button (only show if current user is owner OR comment author) */}
+                      {(activeTree?.owner_id === user?.id || comment.user_id === user?.id) && (
+                        <button
+                          onClick={async () => {
+                            if (confirm('Are you sure you want to delete this research note?')) {
+                              try {
+                                await deleteComment(token!, comment.id);
+                              } catch (err: any) {
+                                alert(err.message || 'Failed to delete note');
+                              }
+                            }
+                          }}
+                          className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 p-1 rounded-md text-red-400 hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer"
+                          title="Delete Research Note"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-white/5 text-center text-slate-400 font-light text-[10px]">
+                    No research discussion logged yet.
+                  </div>
+                )}
+              </div>
+
+              {/* Comment Input */}
+              <form onSubmit={handleCommentSubmit} className="flex gap-2 items-end pt-1">
+                <textarea
+                  value={commentContent}
+                  onChange={(e) => setCommentContent(e.target.value)}
+                  placeholder="Add a research finding or note..."
+                  rows={1}
+                  required
+                  className={`flex-1 px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs resize-none ${
+                    isDarkMode
+                      ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                      : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                  }`}
+                  style={{ minHeight: '34px', maxHeight: '100px' }}
+                />
+                <button
+                  type="submit"
+                  disabled={submittingComment || !commentContent.trim()}
+                  className={`p-2 rounded-lg transition-all shadow-sm flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isDarkMode
+                      ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                      : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Send size={12} />
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Quick Edit button */}
+          <button
+            onClick={() => handleEditPersonClick(selectedPerson)}
+            className="w-full mt-6 py-2.5 px-4 rounded-lg bg-[#1c1c1e] dark:bg-[#f3f3f5] text-white dark:text-[#1c1c1e] hover:bg-slate-800 dark:hover:bg-white font-medium text-xs shadow-sm transition-all"
+          >
+            Edit Historical Record
+          </button>
+        </aside>
+      )}
+
+      {/* Modal: Share Tree Access */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md p-6 rounded-2xl border shadow-2xl transition-all relative ${
+            isDarkMode ? 'bg-[#1a1a1c] border-[#2c2c2e] text-[#f3f3f5]' : 'bg-white border-[#e6e5e0] text-[#1c1c1e]'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-xl font-serif font-semibold flex items-center gap-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                <Users size={20} className="text-[#7b8e7f] dark:text-[#9cb2a2]" />
+                Share Genealogy Canvas
+              </h3>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className={`p-1.5 rounded-lg border transition-colors ${
+                  isDarkMode
+                    ? 'border-white/5 text-slate-500 hover:text-white hover:bg-white/5'
+                    : 'border-slate-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-400 mb-6 font-light">
+              Invite collaborators to view or edit this historical family lineage.
+            </p>
+
+            {/* Invite Collaborator Form */}
+            {activeTree?.owner_id === user?.id ? (
+              <form onSubmit={handleInviteSubmit} className="space-y-4 mb-6">
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    required
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="Enter email address..."
+                    className={`flex-1 px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={(e: any) => setInviteRole(e.target.value)}
+                    className={`px-2 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs ${
+                      isDarkMode
+                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  >
+                    <option value="viewer">Can View</option>
+                    <option value="editor">Can Edit</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={inviting}
+                    className={`px-4 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center justify-center ${
+                      isDarkMode
+                        ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                        : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    {inviting ? 'Inviting...' : 'Invite'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="p-3 rounded-lg bg-slate-500/5 text-slate-400 text-[11px] mb-6 font-light">
+                Only the tree creator/owner can manage sharing permissions and invite new editors/viewers.
+              </div>
+            )}
+
+            {/* List of active collaborators */}
+            <div className="space-y-4">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400">
+                People with Access
+              </h4>
+              
+              <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                {/* Tree Owner */}
+                <div className="flex items-center justify-between text-xs py-1 border-b border-dashed border-slate-100 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold uppercase ${
+                      isDarkMode ? 'bg-[#2c2c2e] text-[#9cb2a2]' : 'bg-slate-200 text-[#7b8e7f]'
+                    }`}>
+                      {collaborators?.owner?.name ? collaborators.owner.name[0] : 'O'}
+                    </div>
+                    <div>
+                      <span className="font-semibold block">{collaborators?.owner?.name || 'Unknown Owner'}</span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">{collaborators?.owner?.email}</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#7b8e7f]/10 text-[#7b8e7f] dark:text-[#9cb2a2] dark:bg-[#9cb2a2]/10 uppercase tracking-wider">
+                    Owner
+                  </span>
+                </div>
+
+                {/* Collaborators */}
+                {collaborators?.collaborators && collaborators.collaborators.length > 0 ? (
+                  collaborators.collaborators.map((collab: any) => (
+                    <div key={collab.id} className="flex items-center justify-between text-xs py-1 border-b border-dashed border-slate-100 dark:border-white/5">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold uppercase ${
+                          isDarkMode ? 'bg-[#2c2c2e] text-[#9cb2a2]' : 'bg-slate-200 text-[#7b8e7f]'
+                        }`}>
+                          {collab.user?.name ? collab.user.name[0] : 'C'}
+                        </div>
+                        <div>
+                          <span className="font-semibold block">{collab.user?.name || 'Unknown User'}</span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">{collab.user?.email}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[10px] font-semibold uppercase tracking-wider ${
+                          collab.role === 'editor' ? 'text-amber-500' : 'text-slate-400'
+                        }`}>
+                          {collab.role}
+                        </span>
+                        
+                        {activeTree?.owner_id === user?.id && (
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Remove access for ${collab.user?.name || 'this user'}?`)) {
+                                try {
+                                  await removeCollaborator(token!, collab.id);
+                                } catch (err: any) {
+                                  alert(err.message || 'Failed to remove collaborator');
+                                }
+                              }
+                            }}
+                            className="p-1 rounded text-red-400 hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer"
+                            title="Revoke Collaborator Access"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-6 text-center text-slate-400 font-light text-[11px]">
+                    No collaborators added yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notion-Inspired sliding Activity Log Drawer */}
+      {showHistoryDrawer && (
+        <aside
+          className={`absolute top-0 right-0 z-30 w-[350px] md:w-[400px] h-full border-l p-8 shadow-2xl overflow-y-auto transition-transform duration-300 flex flex-col ${
+            isDarkMode
+              ? 'bg-[#18181a] border-[#2c2c2e] text-[#f3f3f5]'
+              : 'bg-[#faf9f6] border-[#e6e5e0] text-[#1c1c1e]'
+          }`}
+        >
+          <div className="flex items-start justify-between border-b pb-5 mb-5 border-slate-200/50 dark:border-white/5">
+            <div className="space-y-1">
+              <span className="text-[9px] uppercase font-bold tracking-widest text-[#7b8e7f] dark:text-[#9cb2a2]">
+                Audit Trail
+              </span>
+              <h3 className="text-xl font-serif font-semibold mt-1 tracking-tight">
+                Canvas Modification Logs
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowHistoryDrawer(false)}
+              className={`p-1.5 rounded-lg border transition-colors ${
+                isDarkMode
+                  ? 'border-white/5 text-slate-500 hover:text-white hover:bg-white/5'
+                  : 'border-slate-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          {/* Chronological Logs feed */}
+          <div className="flex-1 overflow-y-auto pr-1 space-y-5">
+            {activities && activities.length > 0 ? (
+              <div className="relative pl-4 border-l border-slate-200 dark:border-[#2c2c2e] space-y-6 text-xs font-light">
+                {activities.map((log: any) => (
+                  <div key={log.id} className="relative">
+                    {/* Circle icon marker based on action type */}
+                    <span className={`absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full border-2 border-[#faf9f6] dark:border-[#18181a] ${
+                      log.action.includes('added') || log.action.includes('created')
+                        ? 'bg-[#7b8e7f] dark:bg-[#9cb2a2]'
+                        : log.action.includes('deleted') || log.action.includes('removed')
+                        ? 'bg-red-400'
+                        : 'bg-amber-400'
+                    }`} />
+                    
+                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mb-1">
+                      <span className="font-semibold text-slate-700 dark:text-slate-350">
+                        {log.user?.name || 'System'}
+                      </span>
+                      <span>•</span>
+                      <span>{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+
+                    <p className={`text-[11px] leading-relaxed pl-0.5 ${isDarkMode ? 'text-slate-300' : 'text-slate-650'}`}>
+                      {log.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 rounded-xl border border-dashed border-slate-200 dark:border-white/5 text-center text-slate-400 font-light text-xs">
+                No canvas logs populated yet. Add, modify or link members to generate events.
+              </div>
+            )}
+          </div>
+        </aside>
+      )}
+    </main>
+  );
+}
