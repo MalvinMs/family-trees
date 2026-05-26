@@ -72,6 +72,11 @@ interface TreeState {
   fetchPersonDetail: (token: string, personId: string) => Promise<Person | null>;
   updateNodePositionLocal: (personId: string, x: number, y: number) => void;
   patchNodePositionSSE: (personId: string, x: number, y: number) => void;
+  addPersonLocal: (person: Person) => void;
+  updatePersonLocal: (personId: string, data: Partial<Person>) => void;
+  deletePersonLocal: (personId: string) => void;
+  addRelationshipLocal: (relationship: Relationship) => void;
+  deleteRelationshipLocal: (relationshipId: string) => void;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -454,6 +459,84 @@ export const useTreeStore = create<TreeState>((set, get) => ({
             p.id === personId
               ? { ...p, ui_metadata: { ...p.ui_metadata, x, y } }
               : p
+          ),
+        },
+      });
+    }
+  },
+
+  addPersonLocal: (person) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      if (activeTree.persons.some((p) => p.id === person.id)) return;
+      set({
+        activeTree: {
+          ...activeTree,
+          persons: [...activeTree.persons, person],
+        },
+      });
+    }
+  },
+
+  updatePersonLocal: (personId, data) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      set({
+        activeTree: {
+          ...activeTree,
+          persons: activeTree.persons.map((p) =>
+            p.id === personId
+              ? {
+                  ...p,
+                  ...data,
+                  ui_metadata: {
+                    ...p.ui_metadata,
+                    ...(data.ui_metadata || {}),
+                  },
+                }
+              : p
+          ),
+        },
+      });
+    }
+  },
+
+  deletePersonLocal: (personId) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      set({
+        activeTree: {
+          ...activeTree,
+          persons: activeTree.persons.filter((p) => p.id !== personId),
+          relationships: activeTree.relationships.filter(
+            (r) => r.person_a !== personId && r.person_b !== personId
+          ),
+        },
+      });
+    }
+  },
+
+  addRelationshipLocal: (relationship) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      if (activeTree.relationships.some((r) => r.id === relationship.id)) return;
+      set({
+        activeTree: {
+          ...activeTree,
+          relationships: [...activeTree.relationships, relationship],
+        },
+      });
+    }
+  },
+
+  deleteRelationshipLocal: (relationshipId) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      set({
+        activeTree: {
+          ...activeTree,
+          relationships: activeTree.relationships.filter(
+            (r) => r.id !== relationshipId
           ),
         },
       });

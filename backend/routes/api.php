@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\TreeController;
 use App\Http\Controllers\Api\TreeCollaboratorController;
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\CommentController;
-use App\Http\Controllers\Api\TreeStreamController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -20,7 +19,6 @@ use Illuminate\Support\Facades\Route;
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-Route::get('trees/{id}/stream', [TreeStreamController::class, 'stream']);
 
 // Authenticated routes
 Route::middleware('auth:sanctum')->group(function () {

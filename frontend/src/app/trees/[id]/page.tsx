@@ -19,6 +19,8 @@ import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore, Person, Relationship } from '../../../store/treeStore';
 import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
+import Echo from 'laravel-echo';
+import Pusher from 'pusher-js';
 
 export default function TreeWorkspacePage() {
   const { id } = useParams() as { id: string };
@@ -45,6 +47,11 @@ export default function TreeWorkspacePage() {
     fetchPersonDetail,
     updateNodePositionLocal,
     patchNodePositionSSE,
+    addPersonLocal,
+    updatePersonLocal,
+    deletePersonLocal,
+    addRelationshipLocal,
+    deleteRelationshipLocal,
     loading,
   } = useTreeStore();
 
@@ -125,46 +132,77 @@ export default function TreeWorkspacePage() {
     }
   }, [isAuthenticated, token, id]);
 
-  // Open EventSource SSE stream for real-time collaborative updates!
+  // Initialize Laravel Echo with Reverb and subscribe to real-time events!
   useEffect(() => {
     if (!token || !id) return;
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-    const eventSource = new EventSource(`${API_URL}/api/trees/${id}/stream?token=${token}`);
+    // Set Pusher globally for Echo
+    (window as any).Pusher = Pusher;
 
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'tree_changed') {
-          fetchTreeDetail(token, id);
-          fetchActivities(token, id);
-        } else if (data.event === 'node_moved') {
-          // Intercept node_moved delta event and patch coordinates directly at 60 FPS!
-          patchNodePositionSSE(data.id, data.x, data.y);
-          
-          // Also patch the local React Flow nodes state instantly!
-          setNodes((prevNodes) =>
-            prevNodes.map((node) =>
-              node.id === data.id
-                ? { ...node, position: { x: data.x, y: data.y } }
-                : node
-            )
-          );
-        } else if (data.event === 'collaborators_changed') {
-          fetchCollaborators(token, id);
-        } else if (data.event === 'comments_changed' && selectedPerson && selectedPerson.id === data.person_id) {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const host = new URL(API_URL).hostname;
+
+    const echo = new Echo({
+      broadcaster: 'reverb',
+      key: 'kinova_key',
+      wsHost: host,
+      wsPort: 8080,
+      forceTLS: false,
+      disableStats: true,
+      enabledTransports: ['ws', 'wss'],
+      authEndpoint: `${API_URL}/api/broadcasting/auth`,
+      auth: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+      },
+    });
+
+    const channel = echo.private(`tree.${id}`);
+
+    channel
+      .listen('.PersonCreated', (e: { person: Person }) => {
+        addPersonLocal(e.person);
+      })
+      .listen('.PersonUpdated', (e: { person: Person }) => {
+        updatePersonLocal(e.person.id, e.person);
+      })
+      .listen('.PersonDeleted', (e: { personId: string }) => {
+        deletePersonLocal(e.personId);
+      })
+      .listen('.RelationshipCreated', (e: { relationship: Relationship }) => {
+        addRelationshipLocal(e.relationship);
+      })
+      .listen('.RelationshipDeleted', (e: { relationshipId: string }) => {
+        deleteRelationshipLocal(e.relationshipId);
+      })
+      .listen('.CommentCreated', (e: { comment: any }) => {
+        if (selectedPerson && selectedPerson.id === e.comment.person_id) {
           fetchComments(token, selectedPerson.id);
-          fetchActivities(token, id);
         }
-      } catch (err) {
-        // Quietly fail or log
-      }
-    };
+        fetchActivities(token, id);
+      })
+      .listenForWhisper('node-dragging', (data: { id: string; x: number; y: number }) => {
+        // Optimistic, ultra-fast client-to-client drag update at 60 FPS!
+        patchNodePositionSSE(data.id, data.x, data.y);
+        setNodes((prevNodes) =>
+          prevNodes.map((node) =>
+            node.id === data.id
+              ? { ...node, position: { x: data.x, y: data.y } }
+              : node
+          )
+        );
+      });
+
+    // Save echo reference in window to trigger whispers in dragging handler
+    (window as any).echoInstance = echo;
 
     return () => {
-      eventSource.close();
+      channel.unsubscribe();
+      echo.disconnect();
     };
-  }, [id, token, selectedPerson, patchNodePositionSSE]);
+  }, [id, token, selectedPerson, addPersonLocal, updatePersonLocal, deletePersonLocal, addRelationshipLocal, deleteRelationshipLocal, patchNodePositionSSE, fetchComments, fetchActivities, setNodes]);
 
   useEffect(() => {
     if (token && id) {
@@ -246,6 +284,21 @@ export default function TreeWorkspacePage() {
       }, 500);
     };
   }, []);
+
+  // Active coordinate dragging C2C whispering over WebSocket Reverb
+  const onNodeDrag = useCallback(
+    (event: any, node: Node) => {
+      const echo = (window as any).echoInstance;
+      if (echo && id) {
+        echo.private(`tree.${id}`).whisper('node-dragging', {
+          id: node.id,
+          x: node.position.x,
+          y: node.position.y,
+        });
+      }
+    },
+    [id]
+  );
 
   // Handle Drag & Drop Nodes coordinate persistence
   const onNodeDragStop = useCallback(
@@ -570,6 +623,7 @@ export default function TreeWorkspacePage() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onEdgesDelete={onEdgesDelete}
           onNodeClick={onNodeClick}

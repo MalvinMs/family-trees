@@ -6,9 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Person;
 use App\Models\Tree;
 use App\Models\ActivityLog;
-use App\Jobs\BroadcastTreeEventJob;
+use App\Events\PersonCreated;
+use App\Events\PersonUpdated;
+use App\Events\PersonDeleted;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Redis;
 
 class PersonController extends Controller
 {
@@ -74,8 +75,8 @@ class PersonController extends Controller
             'description' => $request->user()->name . " documented new family member " . $person->first_name . " " . ($person->last_name ?? ''),
         ]);
 
-        // Emit real-time reload trigger
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'tree_changed']));
+        // Dispatch real-time WebSocket broadcast event
+        event(new PersonCreated($person));
 
         return response()->json($person, 201);
     }
@@ -142,19 +143,8 @@ class PersonController extends Controller
             'description' => $description,
         ]);
 
-        // Emit real-time update trigger asynchronously
-        if ($isCoordinatesDrag) {
-            BroadcastTreeEventJob::dispatch($tree->id, [
-                'event' => 'node_moved',
-                'id' => $person->id,
-                'x' => $person->ui_metadata['x'] ?? 100,
-                'y' => $person->ui_metadata['y'] ?? 100,
-            ]);
-        } else {
-            BroadcastTreeEventJob::dispatch($tree->id, [
-                'event' => 'tree_changed',
-            ]);
-        }
+        // Dispatch real-time WebSocket broadcast event
+        event(new PersonUpdated($person));
 
         return response()->json($person);
     }
@@ -177,8 +167,8 @@ class PersonController extends Controller
             'description' => $request->user()->name . " removed " . $personName . " from the silsilah record",
         ]);
 
-        // Emit real-time reload trigger
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'tree_changed']));
+        // Dispatch real-time WebSocket broadcast event
+        event(new PersonDeleted($tree->id, $id));
 
         return response()->json(['message' => 'Person removed from tree successfully']);
     }

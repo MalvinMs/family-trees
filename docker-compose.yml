@@ -76,6 +76,33 @@ services:
       - QUEUE_CONNECTION=redis
     command: ["php", "artisan", "queue:work", "--tries=3"]
 
+  # Laravel Reverb Websocket Server
+  reverb:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kinova_reverb
+    restart: always
+    volumes:
+      - ./backend:/var/www
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=kinova
+      - DB_USERNAME=kinova_user
+      - DB_PASSWORD=kinova_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+
   # Next.js Frontend Service
   frontend:
     build:

@@ -10,7 +10,7 @@ use App\Models\TreeCollaborator;
 use App\Models\Person;
 use App\Models\Comment;
 use App\Models\ActivityLog;
-use Illuminate\Support\Facades\Redis;
+use App\Events\CommentCreated;
 
 class CommentController extends Controller
 {
@@ -76,10 +76,11 @@ class CommentController extends Controller
             'description' => auth()->user()->name . " added an archival research note on " . $person->first_name . " " . ($person->last_name ?? ''),
         ]);
 
-        // Realtime Event emit
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'comments_changed', 'person_id' => $person->id]));
+        // Dispatch real-time WebSocket broadcast event
+        $loadedComment = $comment->load('user:id,name,email');
+        event(new CommentCreated($tree->id, $loadedComment));
 
-        return response()->json($comment->load('user:id,name,email'), 201);
+        return response()->json($loadedComment, 201);
     }
 
     /**
@@ -107,9 +108,6 @@ class CommentController extends Controller
             'action' => 'deleted_note',
             'description' => auth()->user()->name . " deleted a research note on " . $person->first_name . " " . ($person->last_name ?? ''),
         ]);
-
-        // Realtime Event emit
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'comments_changed', 'person_id' => $person->id]));
 
         return response()->json(['message' => 'Research note deleted successfully.']);
     }

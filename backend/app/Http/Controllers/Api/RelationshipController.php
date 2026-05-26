@@ -7,8 +7,9 @@ use App\Models\Person;
 use App\Models\Relationship;
 use App\Models\Tree;
 use App\Models\ActivityLog;
+use App\Events\RelationshipCreated;
+use App\Events\RelationshipDeleted;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Redis;
 
 class RelationshipController extends Controller
 {
@@ -89,8 +90,8 @@ class RelationshipController extends Controller
             'description' => $request->user()->name . " linked a " . $request->relation_type . " relationship between " . $personA->first_name . " and " . $personB->first_name,
         ]);
 
-        // Broadcast real-time reload trigger
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'tree_changed']));
+        // Dispatch real-time WebSocket broadcast event
+        event(new RelationshipCreated($relationship));
 
         return response()->json($relationship, 201);
     }
@@ -117,8 +118,8 @@ class RelationshipController extends Controller
             'description' => $request->user()->name . " removed the " . $relationText . " link between " . ($personA ? $personA->first_name : 'deleted member') . " and " . ($personB ? $personB->first_name : 'deleted member'),
         ]);
 
-        // Broadcast real-time reload trigger
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'tree_changed']));
+        // Dispatch real-time WebSocket broadcast event
+        event(new RelationshipDeleted($tree->id, $id));
 
         return response()->json(['message' => 'Relationship removed successfully']);
     }
