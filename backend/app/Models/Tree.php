@@ -15,10 +15,12 @@ class Tree extends Model
         'owner_id',
         'name',
         'settings',
+        'is_public',
     ];
 
     protected $casts = [
         'settings' => 'array',
+        'is_public' => 'boolean',
     ];
 
     /**

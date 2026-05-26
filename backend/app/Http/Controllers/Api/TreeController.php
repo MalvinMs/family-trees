@@ -13,7 +13,15 @@ class TreeController extends Controller
      */
     public function index(Request $request)
     {
-        $trees = $request->user()->trees()->latest()->get();
+        $user = $request->user();
+        
+        $trees = Tree::where('owner_id', $user->id)
+            ->orWhereHas('collaborators', function ($query) use ($user) {
+                $query->where('user_id', $user->id);
+            })
+            ->latest()
+            ->get();
+
         return response()->json($trees);
     }
 
@@ -51,13 +59,44 @@ class TreeController extends Controller
      */
     public function show(Request $request, string $id)
     {
-        $tree = $request->user()->trees()
+        $user = $request->user();
+
+        $tree = Tree::where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('collaborators', function ($q) use ($user) {
+                        $q->where('user_id', $user->id);
+                    });
+            })
             ->with([
                 'persons' => function ($query) {
                     $query->select([
                         'id', 'tree_id', 'first_name', 'last_name', 
                         'gender', 'birth_date', 'death_date', 'biography', 
-                        'ui_metadata'
+                        'ui_metadata', 'dynamic_data'
+                    ]);
+                },
+                'relationships' => function ($query) {
+                    $query->select(['id', 'tree_id', 'person_a', 'person_b', 'relation_type']);
+                },
+                'customFields'
+            ])
+            ->findOrFail($id);
+
+        return response()->json($tree);
+    }
+
+    /**
+     * Display the specified family tree for the public (if public sharing is enabled).
+     */
+    public function showPublic(string $id)
+    {
+        $tree = Tree::where('is_public', true)
+            ->with([
+                'persons' => function ($query) {
+                    $query->select([
+                        'id', 'tree_id', 'first_name', 'last_name', 
+                        'gender', 'birth_date', 'death_date', 'biography', 
+                        'ui_metadata', 'dynamic_data'
                     ]);
                 },
                 'relationships' => function ($query) {
@@ -75,14 +114,23 @@ class TreeController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        $tree = $request->user()->trees()->findOrFail($id);
+        $user = $request->user();
+
+        $tree = Tree::where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('collaborators', function ($q) use ($user) {
+                        $q->where('user_id', $user->id)->where('role', 'editor');
+                    });
+            })
+            ->findOrFail($id);
 
         $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'settings' => ['sometimes', 'nullable', 'array'],
+            'is_public' => ['sometimes', 'required', 'boolean'],
         ]);
 
-        $tree->update($request->only(['name', 'settings']));
+        $tree->update($request->only(['name', 'settings', 'is_public']));
 
         return response()->json($tree);
     }
@@ -92,6 +140,7 @@ class TreeController extends Controller
      */
     public function destroy(Request $request, string $id)
     {
+        // Only the owner can delete the tree completely
         $tree = $request->user()->trees()->findOrFail($id);
         $tree->delete();
 

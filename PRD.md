@@ -691,7 +691,6 @@ Features:
 Duration: 3 months
 
 Features:
-- AI assistant
 - export system
 - mobile responsive optimization
 - public genealogy pages

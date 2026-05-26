@@ -55,6 +55,7 @@ interface TreeState {
   setActiveTree: (tree: Tree | null) => void;
   fetchTrees: (token: string) => Promise<void>;
   fetchTreeDetail: (token: string, treeId: string) => Promise<void>;
+  fetchPublicTreeDetail: (treeId: string) => Promise<void>;
   createTree: (token: string, name: string) => Promise<Tree | null>;
   addPerson: (token: string, data: Omit<Person, 'id'>) => Promise<void>;
   updatePerson: (token: string, personId: string, data: Partial<Person>) => Promise<void>;
@@ -114,6 +115,18 @@ export const useTreeStore = create<TreeState>((set, get) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Failed to fetch tree details');
+      const data = await res.json();
+      set({ activeTree: data, loading: false });
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
+    }
+  },
+
+  fetchPublicTreeDetail: async (treeId) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await fetch(`${API_URL}/api/public/trees/${treeId}`);
+      if (!res.ok) throw new Error('Failed to fetch public tree details');
       const data = await res.json();
       set({ activeTree: data, loading: false });
     } catch (err: any) {

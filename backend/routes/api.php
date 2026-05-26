@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\TreeCollaboratorController;
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\CommentController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Broadcast;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,9 +20,13 @@ use Illuminate\Support\Facades\Route;
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/public/trees/{id}', [TreeController::class, 'showPublic']);
 
 // Authenticated routes
 Route::middleware('auth:sanctum')->group(function () {
+    // Register Broadcast routes inside API with auth:sanctum middleware
+    Broadcast::routes(['middleware' => ['auth:sanctum']]);
+
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
 
@@ -55,4 +60,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('persons/{id}/comments', [CommentController::class, 'index']);
     Route::post('comments', [CommentController::class, 'store']);
     Route::delete('comments/{id}', [CommentController::class, 'destroy']);
+
+    // Archival export endpoints
+    Route::get('trees/{id}/export/json', [\App\Http\Controllers\Api\ExportController::class, 'exportJson']);
+    Route::get('trees/{id}/export/gedcom', [\App\Http\Controllers\Api\ExportController::class, 'exportGedcom']);
 });

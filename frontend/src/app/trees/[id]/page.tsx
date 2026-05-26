@@ -17,7 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore, Person, Relationship } from '../../../store/treeStore';
-import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users } from 'lucide-react';
+import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
@@ -68,6 +68,7 @@ export default function TreeWorkspacePage() {
   const [showFieldModal, setShowFieldModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [submittingPerson, setSubmittingPerson] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showTips, setShowTips] = useState(true);
@@ -507,6 +508,30 @@ export default function TreeWorkspacePage() {
     }
   };
 
+  const handleExport = async (format: 'json' | 'gedcom') => {
+    if (!token || !id) return;
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/trees/${id}/export/${format}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error(`Failed to export tree in ${format} format`);
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${activeTree?.name.toLowerCase().replace(/\s+/g, '_') || 'tree'}.${format === 'gedcom' ? 'ged' : 'json'}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Failed to download export');
+    }
+  };
+
   if (loading && !activeTree) {
     return (
       <div className={`flex min-h-screen items-center justify-center transition-colors duration-300 ${isDarkMode ? 'dark bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'}`}>
@@ -606,6 +631,49 @@ export default function TreeWorkspacePage() {
           >
             <History size={18} />
           </button>
+
+          {/* Export Dropdown */}
+          <div className="relative pointer-events-auto">
+            <button
+              onClick={() => setShowExportMenu((prev) => !prev)}
+              className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
+                isDarkMode
+                  ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                  : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+              title="Export family archives"
+            >
+              <Download size={18} />
+            </button>
+            {showExportMenu && (
+              <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-2xl border overflow-hidden z-50 transition-all ${
+                isDarkMode ? 'bg-[#18181a] border-white/5 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
+              }`}>
+                <button
+                  onClick={() => {
+                    handleExport('gedcom');
+                    setShowExportMenu(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                    isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                  }`}
+                >
+                  Export GEDCOM (.ged)
+                </button>
+                <button
+                  onClick={() => {
+                    handleExport('json');
+                    setShowExportMenu(false);
+                  }}
+                  className={`w-full text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                    isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                  }`}
+                >
+                  Export JSON Backup (.json)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -956,7 +1024,7 @@ export default function TreeWorkspacePage() {
       {/* Notion-Inspired sliding Person Detail Sidebar / Drawer */}
       {selectedPerson && (
         <aside
-          className={`absolute top-0 right-0 z-30 w-[350px] md:w-[400px] h-full border-l p-8 shadow-2xl overflow-y-auto transition-transform duration-300 flex flex-col justify-between ${
+          className={`absolute z-30 shadow-2xl overflow-y-auto transition-transform duration-300 flex flex-col justify-between w-full h-[70vh] bottom-0 top-auto md:top-0 md:bottom-auto md:right-0 md:w-[400px] md:h-full border-t md:border-t-0 md:border-l p-6 md:p-8 rounded-t-3xl md:rounded-t-none ${
             isDarkMode
               ? 'bg-[#18181a] border-[#2c2c2e] text-[#f3f3f5]'
               : 'bg-[#faf9f6] border-[#e6e5e0] text-[#1c1c1e]'

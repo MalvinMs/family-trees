@@ -17,8 +17,16 @@ class CustomFieldController extends Controller
             'tree_id' => ['required', 'uuid', 'exists:trees,id']
         ]);
 
-        // Authorize that the user owns the tree
-        $tree = $request->user()->trees()->findOrFail($request->tree_id);
+        $user = $request->user();
+
+        // Authorize that the user owns the tree or is a collaborator
+        $tree = Tree::where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('collaborators', function ($q) use ($user) {
+                        $q->where('user_id', $user->id);
+                    });
+            })
+            ->findOrFail($request->tree_id);
 
         $fields = $tree->customFields()->latest()->get();
         return response()->json($fields);
@@ -36,8 +44,16 @@ class CustomFieldController extends Controller
             'validation_rules' => ['nullable', 'array'],
         ]);
 
-        // Authorize that the user owns the tree
-        $tree = $request->user()->trees()->findOrFail($request->tree_id);
+        $user = $request->user();
+
+        // Authorize that the user owns the tree or is an editor collaborator
+        $tree = Tree::where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('collaborators', function ($q) use ($user) {
+                        $q->where('user_id', $user->id)->where('role', 'editor');
+                    });
+            })
+            ->findOrFail($request->tree_id);
 
         $customField = CustomField::create([
             'tree_id' => $tree->id,
@@ -55,9 +71,16 @@ class CustomFieldController extends Controller
     public function destroy(Request $request, string $id)
     {
         $customField = CustomField::findOrFail($id);
+        $user = $request->user();
 
-        // Authorize that the user owns the tree this custom field belongs to
-        $request->user()->trees()->findOrFail($customField->tree_id);
+        // Authorize that the user owns the tree or is an editor collaborator this custom field belongs to
+        Tree::where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('collaborators', function ($q) use ($user) {
+                        $q->where('user_id', $user->id)->where('role', 'editor');
+                    });
+            })
+            ->findOrFail($customField->tree_id);
 
         $customField->delete();
 
