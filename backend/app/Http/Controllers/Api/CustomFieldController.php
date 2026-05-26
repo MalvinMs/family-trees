@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\CustomField;
+use Illuminate\Http\Request;
+
+class CustomFieldController extends Controller
+{
+    /**
+     * Display a listing of the custom fields for a specific tree.
+     */
+    public function index(Request $request)
+    {
+        $request->validate([
+            'tree_id' => ['required', 'uuid', 'exists:trees,id']
+        ]);
+
+        // Authorize that the user owns the tree
+        $tree = $request->user()->trees()->findOrFail($request->tree_id);
+
+        $fields = $tree->customFields()->latest()->get();
+        return response()->json($fields);
+    }
+
+    /**
+     * Store a newly created custom field.
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'tree_id' => ['required', 'uuid', 'exists:trees,id'],
+            'field_name' => ['required', 'string', 'max:255'],
+            'field_type' => ['required', 'string', 'in:text,date,dropdown,tag,file,image'],
+            'validation_rules' => ['nullable', 'array'],
+        ]);
+
+        // Authorize that the user owns the tree
+        $tree = $request->user()->trees()->findOrFail($request->tree_id);
+
+        $customField = CustomField::create([
+            'tree_id' => $tree->id,
+            'field_name' => $request->field_name,
+            'field_type' => $request->field_type,
+            'validation_rules' => $request->validation_rules ?? [],
+        ]);
+
+        return response()->json($customField, 201);
+    }
+
+    /**
+     * Remove the specified custom field.
+     */
+    public function destroy(Request $request, string $id)
+    {
+        $customField = CustomField::findOrFail($id);
+
+        // Authorize that the user owns the tree this custom field belongs to
+        $request->user()->trees()->findOrFail($customField->tree_id);
+
+        $customField->delete();
+
+        return response()->json(['message' => 'Custom field deleted successfully']);
+    }
+}

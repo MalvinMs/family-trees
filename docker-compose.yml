@@ -1,0 +1,73 @@
+services:
+  # Database Service
+  postgres:
+    image: postgres:15-alpine
+    container_name: kinova_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: kinova
+      POSTGRES_USER: kinova_user
+      POSTGRES_PASSWORD: kinova_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Cache Service
+  redis:
+    image: redis:alpine
+    container_name: kinova_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Laravel API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kinova_backend
+    restart: always
+    volumes:
+      - ./backend:/var/www
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=kinova
+      - DB_USERNAME=kinova_user
+      - DB_PASSWORD=kinova_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PHP_CLI_SERVER_WORKERS=10
+
+  # Next.js Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kinova_frontend
+    restart: always
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+
+volumes:
+  postgres_data:
+  redis_data:

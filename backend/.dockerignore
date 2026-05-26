@@ -1,0 +1,9 @@
+vendor
+.env
+.env.backup
+.phpunit.result.cache
+node_modules
+npm-debug.log
+.git
+.gitignore
+Dockerfile
