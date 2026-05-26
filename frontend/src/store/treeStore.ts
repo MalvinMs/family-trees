@@ -57,6 +57,7 @@ interface TreeState {
   fetchTreeDetail: (token: string, treeId: string) => Promise<void>;
   fetchPublicTreeDetail: (treeId: string) => Promise<void>;
   createTree: (token: string, name: string) => Promise<Tree | null>;
+  importTree: (token: string, jsonData: string) => Promise<Tree | null>;
   addPerson: (token: string, data: Omit<Person, 'id'>) => Promise<void>;
   updatePerson: (token: string, personId: string, data: Partial<Person>) => Promise<void>;
   deletePerson: (token: string, personId: string) => Promise<void>;
@@ -150,6 +151,27 @@ export const useTreeStore = create<TreeState>((set, get) => ({
       return newTree;
     } catch (err: any) {
       set({ error: err.message });
+      return null;
+    }
+  },
+
+  importTree: async (token, jsonData) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await fetch(`${API_URL}/api/trees/import/json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tree_data: jsonData }),
+      });
+      if (!res.ok) throw new Error('Failed to import family tree archive');
+      const newTree = await res.json();
+      set((state) => ({ trees: [newTree, ...state.trees], loading: false }));
+      return newTree;
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
       return null;
     }
   },

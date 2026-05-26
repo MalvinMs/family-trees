@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
 
     // Family Tree Management
+    Route::post('trees/import/json', [TreeController::class, 'importJson']);
     Route::apiResource('trees', TreeController::class);
 
     // Person Management (CRUD individual family nodes)

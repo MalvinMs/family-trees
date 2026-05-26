@@ -4,12 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../store/authStore';
 import { useTreeStore } from '../store/treeStore';
-import { Plus, LogOut, Network, Calendar, Award, Compass, CompassIcon, BookOpen, Clock, Heart, Sun, Moon } from 'lucide-react';
+import { Plus, LogOut, Network, Calendar, Award, Compass, CompassIcon, BookOpen, Clock, Heart, Sun, Moon, Upload } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const { token, user, logout, isAuthenticated, initialize } = useAuthStore();
-  const { trees, fetchTrees, createTree, loading } = useTreeStore();
+  const { trees, fetchTrees, createTree, importTree, loading } = useTreeStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTreeName, setNewTreeName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -64,6 +64,30 @@ export default function DashboardPage() {
     }
   };
 
+  const handleImportTree = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const content = event.target?.result as string;
+      try {
+        setCreating(true);
+        const imported = await importTree(token, content);
+        setCreating(false);
+        if (imported) {
+          router.push(`/trees/${imported.id}`);
+        } else {
+          alert('Failed to import tree archive.');
+        }
+      } catch (err: any) {
+        setCreating(false);
+        alert('Invalid JSON file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleLogout = () => {
     logout();
     router.push('/login');
@@ -106,6 +130,16 @@ export default function DashboardPage() {
               <Plus size={14} />
               Document New Lineage
             </button>
+            <label className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[#e6e5e0] dark:border-[#2c2c2e] bg-white dark:bg-[#1a1a1c] text-slate-700 dark:text-slate-300 hover:bg-[#faf9f6] dark:hover:bg-white/5 font-medium text-xs shadow-xs transition-all cursor-pointer">
+              <Upload size={14} />
+              Import Archive (.json)
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportTree}
+                className="hidden"
+              />
+            </label>
             <button
               onClick={toggleTheme}
               className={`flex items-center justify-center p-2.5 rounded-lg border shadow-xs transition-all cursor-pointer ${

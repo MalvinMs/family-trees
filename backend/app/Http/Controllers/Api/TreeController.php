@@ -146,4 +146,72 @@ class TreeController extends Controller
 
         return response()->json(['message' => 'Tree deleted successfully']);
     }
+
+    /**
+     * Import a family tree from a JSON archive backup.
+     */
+    public function importJson(Request $request)
+    {
+        $request->validate([
+            'tree_data' => ['required', 'string'],
+        ]);
+
+        $jsonData = json_decode($request->tree_data, true);
+        if (!$jsonData || !is_array($jsonData)) {
+            return response()->json(['message' => 'Invalid JSON structure.'], 422);
+        }
+
+        // 1. Create a new Tree
+        $tree = $request->user()->trees()->create([
+            'name' => ($jsonData['name'] ?? 'Imported Family Tree') . ' (Restored)',
+            'settings' => $jsonData['settings'] ?? [
+                'theme' => 'default_light',
+                'node' => ['shape' => 'card', 'border_radius' => 8, 'font' => 'sans-serif'],
+                'edge' => ['style' => 'smoothstep', 'width' => 2]
+            ],
+        ]);
+
+        // 2. Import Persons and map old UUIDs to new UUIDs
+        $personIdMap = [];
+        foreach ($jsonData['persons'] ?? [] as $p) {
+            $newPerson = \App\Models\Person::create([
+                'tree_id' => $tree->id,
+                'first_name' => $p['first_name'],
+                'last_name' => $p['last_name'] ?? null,
+                'gender' => $p['gender'],
+                'birth_date' => $p['birth_date'] ?? null,
+                'death_date' => $p['death_date'] ?? null,
+                'biography' => $p['biography'] ?? null,
+                'dynamic_data' => $p['dynamic_data'] ?? [],
+                'ui_metadata' => $p['ui_metadata'] ?? [],
+            ]);
+            $personIdMap[$p['id']] = $newPerson->id;
+        }
+
+        // 3. Import Custom Fields
+        foreach ($jsonData['custom_fields'] ?? ($jsonData['custom_fields'] ?? []) as $cf) {
+            \App\Models\CustomField::create([
+                'tree_id' => $tree->id,
+                'field_name' => $cf['field_name'],
+                'field_type' => $cf['field_type'],
+                'validation_rules' => $cf['validation_rules'] ?? [],
+            ]);
+        }
+
+        // 4. Import Relationships utilizing personIdMap
+        foreach ($jsonData['relationships'] ?? [] as $rel) {
+            $newPersonA = $personIdMap[$rel['person_a']] ?? null;
+            $newPersonB = $personIdMap[$rel['person_b']] ?? null;
+            if ($newPersonA && $newPersonB) {
+                \App\Models\Relationship::create([
+                    'tree_id' => $tree->id,
+                    'person_a' => $newPersonA,
+                    'person_b' => $newPersonB,
+                    'relation_type' => $rel['relation_type'],
+                ]);
+            }
+        }
+
+        return response()->json($tree, 201);
+    }
 }
