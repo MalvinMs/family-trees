@@ -386,8 +386,8 @@ export default function DashboardPage() {
       {/* Delete Tree Alert Dialog Modal */}
       {showDeleteModal && treeToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md p-6 rounded-2xl border border-red-500/20 shadow-2xl relative bg-white dark:bg-[#1a1a1c] text-[#1c1c1e] dark:text-[#f3f3f5]">
-            <h3 className="text-2xl font-serif font-semibold text-red-500 mb-2">
+          <div className="w-full max-w-md p-6 rounded-2xl border border-[#c27a7a]/20 shadow-2xl relative bg-white dark:bg-[#1a1a1c] text-[#1c1c1e] dark:text-[#f3f3f5]">
+            <h3 className="text-2xl font-serif font-semibold text-[#c27a7a] mb-2">
               Erase Lineage Archive
             </h3>
             <p className="text-xs text-slate-400 mb-6 leading-relaxed">
@@ -408,7 +408,7 @@ export default function DashboardPage() {
               <button
                 onClick={handleConfirmDeleteTree}
                 disabled={deleting}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-xs transition-all shadow-sm"
+                className="px-4 py-2 rounded-lg bg-[#c27a7a] hover:bg-[#b06a6a] dark:bg-[#965a5a] dark:hover:bg-[#854e4e] text-white font-semibold text-xs transition-all shadow-sm"
               >
                 {deleting ? 'Deleting Archive...' : 'Delete Permanently'}
               </button>
