@@ -58,6 +58,7 @@ interface TreeState {
   fetchPublicTreeDetail: (treeId: string) => Promise<void>;
   createTree: (token: string, name: string) => Promise<Tree | null>;
   importTree: (token: string, jsonData: string) => Promise<Tree | null>;
+  deleteTree: (token: string, treeId: string) => Promise<void>;
   addPerson: (token: string, data: Omit<Person, 'id'>) => Promise<void>;
   updatePerson: (token: string, personId: string, data: Partial<Person>) => Promise<void>;
   deletePerson: (token: string, personId: string) => Promise<void>;
@@ -173,6 +174,25 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message, loading: false });
       return null;
+    }
+  },
+
+  deleteTree: async (token, treeId) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await fetch(`${API_URL}/api/trees/${treeId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error('Failed to delete family tree');
+      set((state) => ({
+        trees: state.trees.filter((t) => t.id !== treeId),
+        loading: false,
+      }));
+    } catch (err: any) {
+      set({ error: err.message, loading: false });
     }
   },
 

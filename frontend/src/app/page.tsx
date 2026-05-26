@@ -4,16 +4,22 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../store/authStore';
 import { useTreeStore } from '../store/treeStore';
-import { Plus, LogOut, Network, Calendar, Award, Compass, CompassIcon, BookOpen, Clock, Heart, Sun, Moon, Upload } from 'lucide-react';
+import { Plus, LogOut, Network, Calendar, Award, Compass, CompassIcon, BookOpen, Clock, Heart, Sun, Moon, Upload, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const { token, user, logout, isAuthenticated, initialize } = useAuthStore();
-  const { trees, fetchTrees, createTree, importTree, loading } = useTreeStore();
+  const { trees, fetchTrees, createTree, importTree, deleteTree, loading } = useTreeStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTreeName, setNewTreeName] = useState('');
   const [creating, setCreating] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  
+  // Tree Deletion State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [treeToDelete, setTreeToDelete] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -86,6 +92,21 @@ export default function DashboardPage() {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleDeleteTreeClick = (e: React.MouseEvent, tree: any) => {
+    e.stopPropagation(); // Prevents navigating into the workspace!
+    setTreeToDelete(tree);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDeleteTree = async () => {
+    if (!treeToDelete || !token) return;
+    setDeleting(true);
+    await deleteTree(token, treeToDelete.id);
+    setDeleting(false);
+    setTreeToDelete(null);
+    setShowDeleteModal(false);
   };
 
   const handleLogout = () => {
@@ -200,9 +221,18 @@ export default function DashboardPage() {
                           Last modified {new Date(tree.created_at as any).toLocaleDateString()}
                         </p>
                       </div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-[#7b8e7f] dark:text-[#9cb2a2] bg-[#7b8e7f]/10 dark:bg-[#9cb2a2]/15 px-2.5 py-1 rounded-full">
-                        View Canvas
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#7b8e7f] dark:text-[#9cb2a2] bg-[#7b8e7f]/10 dark:bg-[#9cb2a2]/15 px-2.5 py-1 rounded-full">
+                          View Canvas
+                        </span>
+                        <button
+                          onClick={(e) => handleDeleteTreeClick(e, tree)}
+                          className="p-2 rounded-lg border border-transparent hover:border-red-500/20 hover:bg-red-500/5 text-slate-400 hover:text-red-500 transition-all pointer-events-auto"
+                          title="Delete lineage archive"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -349,6 +379,40 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Tree Alert Dialog Modal */}
+      {showDeleteModal && treeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md p-6 rounded-2xl border border-red-500/20 shadow-2xl relative bg-white dark:bg-[#1a1a1c] text-[#1c1c1e] dark:text-[#f3f3f5]">
+            <h3 className="text-2xl font-serif font-semibold text-red-500 mb-2">
+              Erase Lineage Archive
+            </h3>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              Are you sure you want to permanently erase the family tree <strong className="text-slate-800 dark:text-white">"{treeToDelete.name}"</strong>? This action is completely irreversible and will permanently delete all documented ancestors, connections, audit logs, and custom fields from the database.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setTreeToDelete(null);
+                }}
+                className="px-4 py-2 rounded-lg border border-[#e6e5e0] dark:border-[#2c2c2e] text-slate-400 hover:text-slate-600 hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDeleteTree}
+                disabled={deleting}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold text-xs transition-all shadow-sm"
+              >
+                {deleting ? 'Deleting Archive...' : 'Delete Permanently'}
+              </button>
+            </div>
           </div>
         </div>
       )}
