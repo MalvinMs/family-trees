@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Person;
 use App\Models\Tree;
 use App\Models\ActivityLog;
+use App\Jobs\BroadcastTreeEventJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
 
@@ -80,6 +81,26 @@ class PersonController extends Controller
     }
 
     /**
+     * Display the specified person's detailed profile including custom field data.
+     */
+    public function show(Request $request, string $id)
+    {
+        $person = Person::findOrFail($id);
+        $tree = Tree::findOrFail($person->tree_id);
+        
+        // Gate check
+        $userId = $request->user()->id;
+        $isOwner = $tree->owner_id === $userId;
+        $isCollab = $tree->collaborators()->where('user_id', $userId)->exists();
+        
+        if (!$isOwner && !$isCollab) {
+            return response()->json(['message' => 'Unauthorized access to person record.'], 403);
+        }
+
+        return response()->json($person);
+    }
+
+    /**
      * Update the specified person.
      */
     public function update(Request $request, string $id)
@@ -107,7 +128,9 @@ class PersonController extends Controller
         $action = 'updated_member';
         $description = $request->user()->name . " updated " . $person->first_name . "'s historical record";
 
-        if ($request->has('ui_metadata') && count($request->all()) === 1) {
+        $isCoordinatesDrag = $request->has('ui_metadata') && count($request->all()) === 1;
+
+        if ($isCoordinatesDrag) {
             $action = 'dragged_coordinates';
             $description = $request->user()->name . " adjusted layout coordinates for " . $person->first_name;
         }
@@ -119,8 +142,19 @@ class PersonController extends Controller
             'description' => $description,
         ]);
 
-        // Emit real-time update trigger
-        Redis::rpush("tree_events:{$tree->id}", json_encode(['event' => 'tree_changed']));
+        // Emit real-time update trigger asynchronously
+        if ($isCoordinatesDrag) {
+            BroadcastTreeEventJob::dispatch($tree->id, [
+                'event' => 'node_moved',
+                'id' => $person->id,
+                'x' => $person->ui_metadata['x'] ?? 100,
+                'y' => $person->ui_metadata['y'] ?? 100,
+            ]);
+        } else {
+            BroadcastTreeEventJob::dispatch($tree->id, [
+                'event' => 'tree_changed',
+            ]);
+        }
 
         return response()->json($person);
     }

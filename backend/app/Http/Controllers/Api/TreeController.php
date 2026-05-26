@@ -52,7 +52,19 @@ class TreeController extends Controller
     public function show(Request $request, string $id)
     {
         $tree = $request->user()->trees()
-            ->with(['persons', 'relationships', 'customFields'])
+            ->with([
+                'persons' => function ($query) {
+                    $query->select([
+                        'id', 'tree_id', 'first_name', 'last_name', 
+                        'gender', 'birth_date', 'death_date', 'biography', 
+                        'ui_metadata'
+                    ]);
+                },
+                'relationships' => function ($query) {
+                    $query->select(['id', 'tree_id', 'person_a', 'person_b', 'relation_type']);
+                },
+                'customFields'
+            ])
             ->findOrFail($id);
 
         return response()->json($tree);

@@ -69,6 +69,9 @@ interface TreeState {
   fetchComments: (token: string, personId: string) => Promise<void>;
   addComment: (token: string, data: { person_id: string; content: string }) => Promise<void>;
   deleteComment: (token: string, commentId: string) => Promise<void>;
+  fetchPersonDetail: (token: string, personId: string) => Promise<Person | null>;
+  updateNodePositionLocal: (personId: string, x: number, y: number) => void;
+  patchNodePositionSSE: (personId: string, x: number, y: number) => void;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -409,6 +412,51 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message });
       throw err;
+    }
+  },
+
+  fetchPersonDetail: async (token, personId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/persons/${personId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch person details');
+      return await res.json();
+    } catch (err: any) {
+      set({ error: err.message });
+      return null;
+    }
+  },
+
+  updateNodePositionLocal: (personId, x, y) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      set({
+        activeTree: {
+          ...activeTree,
+          persons: activeTree.persons.map((p) =>
+            p.id === personId
+              ? { ...p, ui_metadata: { ...p.ui_metadata, x, y } }
+              : p
+          ),
+        },
+      });
+    }
+  },
+
+  patchNodePositionSSE: (personId, x, y) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      set({
+        activeTree: {
+          ...activeTree,
+          persons: activeTree.persons.map((p) =>
+            p.id === personId
+              ? { ...p, ui_metadata: { ...p.ui_metadata, x, y } }
+              : p
+          ),
+        },
+      });
     }
   },
 }));

@@ -1,8 +1,11 @@
+import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { User, Sparkles } from 'lucide-react';
 import { Person } from '../../store/treeStore';
 
 interface PersonNodeProps {
+  id: string;
+  selected?: boolean;
   data: {
     person: Person;
     onEdit: (person: Person) => void;
@@ -11,7 +14,7 @@ interface PersonNodeProps {
   };
 }
 
-export default function PersonNode({ data }: PersonNodeProps) {
+function PersonNode({ id, selected, data }: PersonNodeProps) {
   const { person, onEdit, onDelete } = data;
   const isDarkMode = data.isDarkMode ?? true;
   const isMale = person.gender === 'male';
@@ -35,7 +38,7 @@ export default function PersonNode({ data }: PersonNodeProps) {
         isDarkMode
           ? 'bg-[#1a1a1c] text-[#f3f3f5] hover:border-[#2e2e30]'
           : 'bg-white text-[#1c1c1e] hover:border-slate-300'
-      }`}
+      } ${selected ? 'ring-2 ring-[#7b8e7f] dark:ring-[#9cb2a2] border-transparent' : ''}`}
     >
       {/* React Flow handles for drawing connections */}
       <Handle type="target" position={Position.Top} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none" id="parent-in" />
@@ -61,14 +64,14 @@ export default function PersonNode({ data }: PersonNodeProps) {
         </div>
       </div>
 
-      {/* Biography snippet (Spacious, Minimal) */}
+      {/* Biography snippet */}
       {person.biography && (
         <p className={`text-left italic leading-relaxed text-[10px] line-clamp-2 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'} font-light mb-3`}>
           "{person.biography}"
         </p>
       )}
 
-      {/* Dynamic custom fields listing (Dynamic Schema!) */}
+      {/* Dynamic custom fields listing */}
       {person.dynamic_data && Object.keys(person.dynamic_data).length > 0 && (
         <div className={`border-t pt-3 mt-3 space-y-1.5 text-left text-[10px] ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
           {Object.entries(person.dynamic_data).map(([key, val]) => {
@@ -83,7 +86,7 @@ export default function PersonNode({ data }: PersonNodeProps) {
         </div>
       )}
 
-      {/* Premium hover action menu (Invisible by default, reveals on hover) */}
+      {/* Action menu */}
       <div className={`flex items-center justify-end gap-2 border-t pt-3 mt-4 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-350 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
         <button
           onClick={(e) => {
@@ -115,3 +118,20 @@ export default function PersonNode({ data }: PersonNodeProps) {
     </div>
   );
 }
+
+export default React.memo(PersonNode, (prevProps, nextProps) => {
+  return (
+    prevProps.id === nextProps.id &&
+    prevProps.selected === nextProps.selected &&
+    prevProps.data.isDarkMode === nextProps.data.isDarkMode &&
+    prevProps.data.person.first_name === nextProps.data.person.first_name &&
+    prevProps.data.person.last_name === nextProps.data.person.last_name &&
+    prevProps.data.person.gender === nextProps.data.person.gender &&
+    prevProps.data.person.birth_date === nextProps.data.person.birth_date &&
+    prevProps.data.person.death_date === nextProps.data.person.death_date &&
+    prevProps.data.person.biography === nextProps.data.person.biography &&
+    JSON.stringify(prevProps.data.person.dynamic_data) === JSON.stringify(nextProps.data.person.dynamic_data) &&
+    prevProps.data.person.ui_metadata?.background_color === nextProps.data.person.ui_metadata?.background_color &&
+    prevProps.data.person.ui_metadata?.border_color === nextProps.data.person.ui_metadata?.border_color
+  );
+});

@@ -31,6 +31,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('trees', TreeController::class);
 
     // Person Management (CRUD individual family nodes)
+    Route::get('persons/{id}', [PersonController::class, 'show']);
     Route::post('persons', [PersonController::class, 'store']);
     Route::put('persons/{id}', [PersonController::class, 'update']);
     Route::delete('persons/{id}', [PersonController::class, 'destroy']);

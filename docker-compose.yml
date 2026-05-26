@@ -50,6 +50,32 @@ services:
       - REDIS_PORT=6379
       - PHP_CLI_SERVER_WORKERS=10
 
+  # Laravel Queue Worker
+  queue:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kinova_queue
+    restart: always
+    volumes:
+      - ./backend:/var/www
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - DB_CONNECTION=pgsql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=kinova
+      - DB_USERNAME=kinova_user
+      - DB_PASSWORD=kinova_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - QUEUE_CONNECTION=redis
+    command: ["php", "artisan", "queue:work", "--tries=3"]
+
   # Next.js Frontend Service
   frontend:
     build:

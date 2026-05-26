@@ -42,6 +42,9 @@ export default function TreeWorkspacePage() {
     fetchComments,
     addComment,
     deleteComment,
+    fetchPersonDetail,
+    updateNodePositionLocal,
+    patchNodePositionSSE,
     loading,
   } = useTreeStore();
 
@@ -135,6 +138,18 @@ export default function TreeWorkspacePage() {
         if (data.event === 'tree_changed') {
           fetchTreeDetail(token, id);
           fetchActivities(token, id);
+        } else if (data.event === 'node_moved') {
+          // Intercept node_moved delta event and patch coordinates directly at 60 FPS!
+          patchNodePositionSSE(data.id, data.x, data.y);
+          
+          // Also patch the local React Flow nodes state instantly!
+          setNodes((prevNodes) =>
+            prevNodes.map((node) =>
+              node.id === data.id
+                ? { ...node, position: { x: data.x, y: data.y } }
+                : node
+            )
+          );
         } else if (data.event === 'collaborators_changed') {
           fetchCollaborators(token, id);
         } else if (data.event === 'comments_changed' && selectedPerson && selectedPerson.id === data.person_id) {
@@ -149,7 +164,7 @@ export default function TreeWorkspacePage() {
     return () => {
       eventSource.close();
     };
-  }, [id, token, selectedPerson]);
+  }, [id, token, selectedPerson, patchNodePositionSSE]);
 
   useEffect(() => {
     if (token && id) {
@@ -217,11 +232,26 @@ export default function TreeWorkspacePage() {
     setEdges(flowEdges);
   }, [activeTree, isDarkMode]);
 
+  // Simple custom debounce helper to save coordinate updates after drag settles
+  const debouncedUpdateCoords = useMemo(() => {
+    let timeoutId: any = null;
+    return (authToken: string, personId: string, uiMetadata: any) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(async () => {
+        try {
+          await useTreeStore.getState().updatePerson(authToken, personId, { ui_metadata: uiMetadata });
+        } catch (err) {
+          console.error('Failed to persist coordinate drag:', err);
+        }
+      }, 500);
+    };
+  }, []);
+
   // Handle Drag & Drop Nodes coordinate persistence
   const onNodeDragStop = useCallback(
     (event: any, node: Node) => {
-      if (!token) return;
-      const person = activeTree?.persons.find((p) => p.id === node.id);
+      if (!token || !activeTree) return;
+      const person = activeTree.persons.find((p) => p.id === node.id);
       if (!person) return;
 
       const updatedUi = {
@@ -230,10 +260,13 @@ export default function TreeWorkspacePage() {
         y: node.position.y,
       };
 
-      // Call API directly in background to save coordinates
-      updatePerson(token, node.id, { ui_metadata: updatedUi });
+      // 1. Optimistic Instant local update in Zustand at 60 FPS
+      updateNodePositionLocal(node.id, node.position.x, node.position.y);
+
+      // 2. Debounced persistence in PostgreSQL database
+      debouncedUpdateCoords(token, node.id, updatedUi);
     },
-    [activeTree, token]
+    [activeTree, token, updateNodePositionLocal, debouncedUpdateCoords]
   );
 
   // Connection Handler (Drawing relationship lines directly on canvas!)
@@ -268,28 +301,42 @@ export default function TreeWorkspacePage() {
     });
   }, []);
 
-  // Handle Node click to load sliding details Drawer
+  // Handle Node click to load sliding details Drawer (loads full details on-demand!)
   const onNodeClick = useCallback(
-    (event: any, node: Node) => {
+    async (event: any, node: Node) => {
       const person = activeTree?.persons.find((p) => p.id === node.id);
       if (person) {
         setSelectedPerson(person);
         setShowHistoryDrawer(false);
+        
+        if (token) {
+          const fullPerson = await fetchPersonDetail(token, person.id);
+          if (fullPerson) {
+            setSelectedPerson(fullPerson);
+          }
+        }
       }
     },
-    [activeTree]
+    [activeTree, token, fetchPersonDetail]
   );
 
-  // Edit Person Click
-  const handleEditPersonClick = (person: Person) => {
-    setEditingPerson(person);
-    setFirstName(person.first_name);
-    setLastName(person.last_name || '');
-    setGender(person.gender);
-    setBirthDate(person.birth_date ? person.birth_date.split('T')[0] : '');
-    setDeathDate(person.death_date ? person.death_date.split('T')[0] : '');
-    setBiography(person.biography || '');
-    setDynamicData(person.dynamic_data || {});
+  // Edit Person Click (loads full details on-demand if dynamic_data is missing)
+  const handleEditPersonClick = async (person: Person) => {
+    let fullPerson = person;
+    if (token && (!person.dynamic_data || Object.keys(person.dynamic_data).length === 0)) {
+      const fetched = await fetchPersonDetail(token, person.id);
+      if (fetched) {
+        fullPerson = fetched;
+      }
+    }
+    setEditingPerson(fullPerson);
+    setFirstName(fullPerson.first_name);
+    setLastName(fullPerson.last_name || '');
+    setGender(fullPerson.gender);
+    setBirthDate(fullPerson.birth_date ? fullPerson.birth_date.split('T')[0] : '');
+    setDeathDate(fullPerson.death_date ? fullPerson.death_date.split('T')[0] : '');
+    setBiography(fullPerson.biography || '');
+    setDynamicData(fullPerson.dynamic_data || {});
     setShowPersonModal(true);
   };
 
