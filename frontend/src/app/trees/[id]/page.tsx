@@ -78,6 +78,7 @@ export default function TreeWorkspacePage() {
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [submittingPerson, setSubmittingPerson] = useState(false);
+  const [submittingRelation, setSubmittingRelation] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showTips, setShowTips] = useState(true);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
@@ -457,7 +458,8 @@ export default function TreeWorkspacePage() {
 
   const handleRelationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !id || !personA || !personB) return;
+    if (!token || !id || !personA || !personB || submittingRelation) return;
+    setSubmittingRelation(true);
 
     try {
       await addRelationship(token, {
@@ -469,6 +471,8 @@ export default function TreeWorkspacePage() {
       setShowRelationModal(false);
     } catch (err: any) {
       alert(err.message || 'Failed to create connection');
+    } finally {
+      setSubmittingRelation(false);
     }
   };
 
@@ -1152,13 +1156,17 @@ export default function TreeWorkspacePage() {
                 </button>
                 <button
                   type="submit"
-                  className={`px-5 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm ${
+                  disabled={submittingRelation}
+                  className={`px-5 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
                     isDarkMode
                       ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
                       : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
                   }`}
                 >
-                  Add Relationship
+                  {submittingRelation && (
+                    <div className={`animate-spin rounded-full h-3.5 w-3.5 border-b-2 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`} />
+                  )}
+                  {submittingRelation ? 'Linking...' : 'Add Relationship'}
                 </button>
               </div>
             </form>
@@ -1386,10 +1394,15 @@ export default function TreeWorkspacePage() {
                                 }
                               }
                             }}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-all cursor-pointer"
+                            className={`px-2.5 py-1 text-[10px] rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer border ${
+                              isDarkMode
+                                ? 'bg-rose-950/20 border-rose-500/20 text-rose-455 hover:bg-rose-500/25 hover:text-rose-350'
+                                : 'bg-rose-50 border-rose-200 text-rose-650 hover:bg-rose-100 hover:text-rose-700'
+                            }`}
                             title="Break connection permanently"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={11} />
+                            <span>Break</span>
                           </button>
                         )}
                       </div>
@@ -1851,7 +1864,11 @@ export default function TreeWorkspacePage() {
                 deleteRelationship(token!, selectedEdge.id);
               }
             }}
-            className="px-3.5 py-1.5 bg-red-500 hover:bg-red-650 text-white rounded-full font-bold text-[10px] shadow-md flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02]"
+            className={`px-4 py-1.5 rounded-full font-bold text-[10px] shadow-md flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02] border ${
+              isDarkMode
+                ? 'bg-rose-950/20 border-rose-500/20 text-rose-455 hover:bg-rose-500/25 hover:text-rose-350'
+                : 'bg-rose-50 border-rose-200 text-rose-650 hover:bg-rose-100 hover:text-rose-700'
+            }`}
           >
             <Trash2 size={12} /> Break Connection
           </button>
