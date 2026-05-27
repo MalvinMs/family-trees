@@ -41,6 +41,8 @@ class RelationshipController extends Controller
             'person_a' => ['required', 'uuid', 'exists:persons,id'],
             'person_b' => ['required', 'uuid', 'exists:persons,id'],
             'relation_type' => ['required', 'string', 'in:parent,spouse,sibling,adopted,guardian,step_parent'],
+            'source_handle' => ['nullable', 'string'],
+            'target_handle' => ['nullable', 'string'],
         ]);
 
         $tree = $this->authorizeEditor($request->user(), $request->tree_id);
@@ -80,6 +82,8 @@ class RelationshipController extends Controller
             'person_a' => $request->person_a,
             'person_b' => $request->person_b,
             'relation_type' => $request->relation_type,
+            'source_handle' => $request->source_handle,
+            'target_handle' => $request->target_handle,
         ]);
 
         // Log the link creation

@@ -23,6 +23,8 @@ export interface Relationship {
   person_a: string;
   person_b: string;
   relation_type: 'parent' | 'spouse' | 'sibling' | 'adopted' | 'guardian' | 'step_parent';
+  source_handle?: string | null;
+  target_handle?: string | null;
 }
 
 export interface CustomField {

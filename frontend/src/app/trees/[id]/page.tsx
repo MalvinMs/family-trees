@@ -104,6 +104,8 @@ export default function TreeWorkspacePage() {
   // New Relation Form State
   const [personA, setPersonA] = useState('');
   const [personB, setPersonB] = useState('');
+  const [sourceHandle, setSourceHandle] = useState<string | null>(null);
+  const [targetHandle, setTargetHandle] = useState<string | null>(null);
   const [relationType, setRelationType] = useState<'parent' | 'spouse' | 'sibling' | 'adopted'>('spouse');
 
   // New Custom Field State
@@ -268,8 +270,8 @@ export default function TreeWorkspacePage() {
         id: rel.id,
         source: rel.person_a,
         target: rel.person_b,
-        sourceHandle: rel.relation_type === 'spouse' ? 'partner-left' : 'child-out',
-        targetHandle: rel.relation_type === 'spouse' ? 'partner-right' : 'parent-in',
+        sourceHandle: rel.source_handle || (rel.relation_type === 'spouse' ? 'partner-left' : 'child-out'),
+        targetHandle: rel.target_handle || (rel.relation_type === 'spouse' ? 'partner-right' : 'parent-in'),
         animated,
         style: { stroke: strokeColor, strokeWidth: 1.5 }, // Thin minimalist custom colors
         type: 'smoothstep',
@@ -338,6 +340,8 @@ export default function TreeWorkspacePage() {
       if (!connection.source || !connection.target) return;
       setPersonA(connection.source);
       setPersonB(connection.target);
+      setSourceHandle(connection.sourceHandle || null);
+      setTargetHandle(connection.targetHandle || null);
       setRelationType('spouse');
       setShowRelationModal(true);
     },
@@ -467,8 +471,12 @@ export default function TreeWorkspacePage() {
         person_a: personA,
         person_b: personB,
         relation_type: relationType,
+        source_handle: sourceHandle,
+        target_handle: targetHandle,
       });
       setShowRelationModal(false);
+      setSourceHandle(null);
+      setTargetHandle(null);
     } catch (err: any) {
       alert(err.message || 'Failed to create connection');
     } finally {

@@ -15,6 +15,8 @@ class Relationship extends Model
         'person_a',
         'person_b',
         'relation_type',
+        'source_handle',
+        'target_handle',
     ];
 
     /**
