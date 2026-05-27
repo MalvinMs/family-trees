@@ -184,9 +184,9 @@ export default function PublicTreeWorkspacePage() {
   return (
     <div className={`flex flex-col h-screen overflow-hidden ${isDarkMode ? 'bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'} transition-colors duration-300`}>
       
-      {/* Premium Minimalist Top Header */}
-      <header className={`px-6 py-4 flex items-center justify-between border-b ${isDarkMode ? 'border-white/5 bg-[#121213]/90' : 'border-slate-200/60 bg-[#faf9f6]/95'} backdrop-blur-md z-10`}>
-        <div className="flex items-center gap-4">
+      {/* Premium Minimalist Top Header - Fully Responsive */}
+      <header className={`px-4 md:px-6 py-3.5 md:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b ${isDarkMode ? 'border-white/5 bg-[#121213]/90' : 'border-slate-200/60 bg-[#faf9f6]/95'} backdrop-blur-md z-10`}>
+        <div className="flex items-center gap-3 md:gap-4">
           <button
             onClick={() => navigate('/')}
             className={`p-2 rounded-full border transition-all ${
@@ -197,30 +197,30 @@ export default function PublicTreeWorkspacePage() {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="text-left">
-            <h1 className="font-serif text-lg font-bold flex items-center gap-2">
-              {activeTree.name}
-              <span className="text-[9px] font-sans font-medium px-2 py-0.5 rounded-full tracking-wider uppercase border bg-[#7b8e7f]/10 border-[#7b8e7f]/20 text-[#7b8e7f]">
+          <div className="text-left max-w-[calc(100vw-100px)] sm:max-w-none">
+            <h1 className="font-serif text-base md:text-lg font-bold flex flex-wrap items-center gap-1.5 md:gap-2">
+              <span className="truncate max-w-[150px] xs:max-w-[220px] sm:max-w-none">{activeTree.name}</span>
+              <span className="text-[8px] md:text-[9px] font-sans font-medium px-2 py-0.5 rounded-full tracking-wider uppercase border bg-[#7b8e7f]/10 border-[#7b8e7f]/20 text-[#7b8e7f] whitespace-nowrap">
                 Public Archive
               </span>
             </h1>
-            <p className="text-[10px] text-slate-400 font-sans tracking-wide">
+            <p className="text-[9px] md:text-[10px] text-slate-400 font-sans tracking-wide">
               Read-only genealogical library view
             </p>
           </div>
         </div>
 
         {/* Global Controls Panel */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
           
           {/* Quick Search */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none">
             <input
               type="text"
               placeholder="Search family member..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`px-4 py-2 w-48 text-xs rounded-full border focus:outline-none transition-all ${
+              className={`px-4 py-2 w-full sm:w-48 text-xs rounded-full border focus:outline-none transition-all ${
                 isDarkMode
                   ? 'border-white/5 bg-white/5 focus:bg-white/10 text-white placeholder-slate-500 focus:border-slate-500'
                   : 'border-slate-200 bg-white focus:bg-slate-50 text-slate-900 placeholder-slate-400 focus:border-slate-400 focus:shadow-xs'
