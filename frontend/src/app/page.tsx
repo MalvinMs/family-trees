@@ -169,10 +169,86 @@ export default function DashboardPage() {
     );
   }
 
-  // Pre-seed mock values for Javanese silsilah dashboard details if tree is empty
-  const defaultTotalAncestors = trees.length > 0 ? 6 : 0;
-  const defaultTotalGenerations = trees.length > 0 ? 3 : 0;
-  const defaultAvgLifespan = trees.length > 0 ? '78 Years' : 'N/A';
+  // 1. Gather all persons across all trees
+  const allPersons = trees.flatMap((t) => t.persons || []);
+  const totalAncestors = allPersons.length;
+
+  // 2. Average Lifespan
+  const deceasedMembers = allPersons.filter((p) => p.birth_date && p.death_date);
+  let avgLifespan = 'N/A';
+  if (deceasedMembers.length > 0) {
+    const totalAge = deceasedMembers.reduce((sum, p) => {
+      const birth = new Date(p.birth_date!).getFullYear();
+      const death = new Date(p.death_date!).getFullYear();
+      return sum + (death - birth);
+    }, 0);
+    avgLifespan = `${Math.round(totalAge / deceasedMembers.length)} Years`;
+  }
+
+  // 3. Total Generations (Longest parent-child chain)
+  let totalGenerations = 0;
+  if (trees.length > 0) {
+    trees.forEach((tree) => {
+      const relationships = tree.relationships || [];
+      const parentsMap = new Map<string, string[]>(); // child -> parent list
+      relationships.forEach((r) => {
+        if (r.relation_type === 'parent') {
+          const child = r.person_b;
+          const parent = r.person_a;
+          if (!parentsMap.has(child)) {
+            parentsMap.set(child, []);
+          }
+          parentsMap.get(child)!.push(parent);
+        }
+      });
+
+      const memo = new Map<string, number>();
+      const getDepth = (personId: string): number => {
+        if (memo.has(personId)) return memo.get(personId)!;
+        const parents = parentsMap.get(personId) || [];
+        if (parents.length === 0) return 1;
+        const maxParentDepth = Math.max(...parents.map(getDepth));
+        const depth = 1 + maxParentDepth;
+        memo.set(personId, depth);
+        return depth;
+      };
+
+      const depths = (tree.persons || []).map((p) => getDepth(p.id));
+      const maxTreeGen = depths.length > 0 ? Math.max(...depths) : 0;
+      if (maxTreeGen > totalGenerations) {
+        totalGenerations = maxTreeGen;
+      }
+    });
+  }
+
+  // 4. Dynastic Milestones (Oldest births across all trees)
+  const timelineMilestones = allPersons
+    .filter((p) => p.birth_date)
+    .map((p) => {
+      const year = new Date(p.birth_date!).getFullYear();
+      return {
+        year,
+        description: `${p.first_name} ${p.last_name || ''} was born${p.dynamic_data?.birth_place ? ` in ${p.dynamic_data.birth_place}` : ''}.`,
+      };
+    })
+    .sort((a, b) => a.year - b.year)
+    .slice(0, 3);
+
+  // 5. Recent Ancestor Profiles (Show deceased/oldest members dynamically)
+  const recentAncestors = allPersons
+    .filter((p) => p.birth_date)
+    .sort((a, b) => {
+      if (a.death_date && !b.death_date) return -1;
+      if (!a.death_date && b.death_date) return 1;
+      return new Date(b.birth_date!).getTime() - new Date(a.birth_date!).getTime();
+    })
+    .slice(0, 3);
+
+  // 6. Spousal Unions
+  const totalSpousalUnions = trees.reduce(
+    (sum, t) => sum + (t.relationships || []).filter((r) => r.relation_type === 'spouse').length,
+    0
+  );
 
   return (
     <main className={`min-h-screen p-6 md:p-16 transition-colors duration-300 ${isDarkMode ? 'dark bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'}`}>
@@ -309,13 +385,13 @@ export default function DashboardPage() {
               <div className="p-4 rounded-xl bg-[#faf9f6] dark:bg-white/2 border border-[#e6e5e0] dark:border-[#2c2c2e] text-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Ancestors</span>
                 <p className="text-2xl font-serif font-semibold mt-1 text-[#7b8e7f] dark:text-[#9cb2a2]">
-                  {defaultTotalAncestors}
+                  {totalAncestors}
                 </p>
               </div>
               <div className="p-4 rounded-xl bg-[#faf9f6] dark:bg-white/2 border border-[#e6e5e0] dark:border-[#2c2c2e] text-center">
                 <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Generations</span>
                 <p className="text-2xl font-serif font-semibold mt-1 text-[#7b8e7f] dark:text-[#9cb2a2]">
-                  {defaultTotalGenerations}
+                  {totalGenerations}
                 </p>
               </div>
             </div>
@@ -325,7 +401,7 @@ export default function DashboardPage() {
                 <Clock size={16} className="text-[#7b8e7f]" />
                 <span className="text-xs text-slate-500 font-medium">Average Lifespan</span>
               </div>
-              <span className="text-sm font-semibold text-slate-800 dark:text-white">{defaultAvgLifespan}</span>
+              <span className="text-sm font-semibold text-slate-800 dark:text-white">{avgLifespan}</span>
             </div>
 
             <div className="p-4 rounded-xl bg-[#faf9f6] dark:bg-white/2 border border-[#e6e5e0] dark:border-[#2c2c2e] flex items-center justify-between">
@@ -333,7 +409,7 @@ export default function DashboardPage() {
                 <Heart size={16} className="text-[#7b8e7f]" />
                 <span className="text-xs text-slate-500 font-medium">Spousal Unions</span>
               </div>
-              <span className="text-sm font-semibold text-slate-800 dark:text-white">{trees.length > 0 ? 2 : 0}</span>
+              <span className="text-sm font-semibold text-slate-800 dark:text-white">{totalSpousalUnions}</span>
             </div>
           </section>
 
@@ -345,21 +421,19 @@ export default function DashboardPage() {
             </h2>
 
             <div className="relative pl-4 border-l border-[#e6e5e0] dark:border-[#2c2c2e] space-y-6 text-xs text-slate-500 font-light">
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full bg-[#7b8e7f] dark:bg-[#9cb2a2] border-2 border-white dark:border-[#1a1a1c]" />
-                <span className="font-bold text-slate-700 dark:text-white block font-mono">1920</span>
-                <span className="text-[11px] block mt-0.5">RM Kartowidjojo was born in Surakarta.</span>
-              </div>
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full bg-[#7b8e7f] dark:bg-[#9cb2a2] border-2 border-white dark:border-[#1a1a1c]" />
-                <span className="font-bold text-slate-700 dark:text-white block font-mono">1952</span>
-                <span className="text-[11px] block mt-0.5">Bambang Kartowidjojo was born (Gen 2).</span>
-              </div>
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-700 border-2 border-white dark:border-[#1a1a1c]" />
-                <span className="font-bold text-slate-700 dark:text-white block font-mono">1986</span>
-                <span className="text-[11px] block mt-0.5">Adhi Cahyo was born in Jakarta (Gen 3).</span>
-              </div>
+              {timelineMilestones.length > 0 ? (
+                timelineMilestones.map((m, idx) => (
+                  <div key={idx} className="relative">
+                    <span className="absolute -left-[21.5px] top-1 w-2.5 h-2.5 rounded-full bg-[#7b8e7f] dark:bg-[#9cb2a2] border-2 border-white dark:border-[#1a1a1c]" />
+                    <span className="font-bold text-slate-700 dark:text-white block font-mono">{m.year}</span>
+                    <span className="text-[11px] block mt-0.5">{m.description}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="py-6 text-slate-400 italic text-xs font-light">
+                  Add ancestor birth dates inside your tree canvas to populate dynastic milestones.
+                </div>
+              )}
             </div>
           </section>
 
@@ -372,21 +446,25 @@ export default function DashboardPage() {
               </h2>
 
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl border border-[#e6e5e0] dark:border-[#2c2c2e] bg-[#faf9f6]/40 dark:bg-white/2 space-y-1.5">
-                  <h4 className="font-bold text-sm">RM Kartowidjojo</h4>
-                  <p className="text-[10px] text-slate-400 font-mono">1920 – 1998</p>
-                  <p className="text-[11px] text-slate-400 line-clamp-2 italic font-light">"Founder of the agricultural coop..."</p>
-                </div>
-                <div className="p-4 rounded-xl border border-[#e6e5e0] dark:border-[#2c2c2e] bg-[#faf9f6]/40 dark:bg-white/2 space-y-1.5">
-                  <h4 className="font-bold text-sm">Siti Sumiyati</h4>
-                  <p className="text-[10px] text-slate-400 font-mono">1925 – 2012</p>
-                  <p className="text-[11px] text-slate-400 line-clamp-2 italic font-light">"Matriarch, batik tulis designer..."</p>
-                </div>
-                <div className="p-4 rounded-xl border border-[#e6e5e0] dark:border-[#2c2c2e] bg-[#faf9f6]/40 dark:bg-white/2 space-y-1.5 col-span-2 md:col-span-1">
-                  <h4 className="font-bold text-sm">Bambang</h4>
-                  <p className="text-[10px] text-slate-400 font-mono">1952 – Present</p>
-                  <p className="text-[11px] text-slate-400 line-clamp-2 italic font-light">"Academic heritage lecturer..."</p>
-                </div>
+                {recentAncestors.length > 0 ? (
+                  recentAncestors.map((p) => {
+                    const birth = p.birth_date ? new Date(p.birth_date).getFullYear() : '???';
+                    const death = p.death_date ? new Date(p.death_date).getFullYear() : p.death_date === null ? 'Present' : '???';
+                    return (
+                      <div key={p.id} className="p-4 rounded-xl border border-[#e6e5e0] dark:border-[#2c2c2e] bg-[#faf9f6]/40 dark:bg-white/2 space-y-1.5 text-left">
+                        <h4 className="font-bold text-sm truncate">{p.first_name} {p.last_name || ''}</h4>
+                        <p className="text-[10px] text-slate-400 font-mono">{birth} – {death}</p>
+                        <p className="text-[11px] text-slate-400 line-clamp-2 italic font-light">
+                          {p.biography ? `"${p.biography}"` : 'No biographical record yet.'}
+                        </p>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="col-span-3 py-10 text-center border border-dashed border-[#e6e5e0] dark:border-[#2c2c2e] rounded-xl text-slate-400 italic text-xs font-light">
+                    Preserve historical ancestors on your canvas to populate dynamic vitals profiles.
+                  </div>
+                )}
               </div>
             </div>
           </section>

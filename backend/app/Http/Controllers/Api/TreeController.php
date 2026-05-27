@@ -19,6 +19,7 @@ class TreeController extends Controller
             ->orWhereHas('collaborators', function ($query) use ($user) {
                 $query->where('user_id', $user->id);
             })
+            ->with(['persons', 'relationships'])
             ->latest()
             ->get();
 
