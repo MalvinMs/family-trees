@@ -13,11 +13,11 @@ graph TD
     %% Public Access
     User([User Clients / Next.js Frontend]) -- "HTTPS (Port 443)" --> HostNginx[Regular Host Nginx]
     
-    subgraph Host System (VPS)
+    subgraph "Host System (VPS)"
         HostNginx -- "Proxy to localhost:8000" --> Port8000[127.0.0.1:8000]
         HostNginx -- "Proxy to localhost:8080" --> Port8080[127.0.0.1:8080]
         
-        subgraph Docker Bridge Network: kinova_network
+        subgraph "Docker Bridge Network: kinova_network"
             Port8000 --> kinova_backend[kinova_backend container]
             Port8080 --> kinova_reverb[kinova_reverb container]
             
