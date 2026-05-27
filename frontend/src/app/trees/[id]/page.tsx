@@ -1840,6 +1840,7 @@ export default function TreeWorkspacePage() {
             )}
           </div>
         </aside>
+      )}
       {/* Mobile Relationship Deletion Control Panel */}
       {selectedEdge && (
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20 shadow-2xl border px-4 py-2.5 rounded-full flex items-center gap-3 backdrop-blur bg-white/95 dark:bg-slate-900/90 border-slate-200 dark:border-white/10 text-xs font-medium animate-bounce pointer-events-auto">
