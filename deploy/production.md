@@ -261,7 +261,7 @@ Deploying the Next.js static application on Cloudflare Pages guarantees low late
 3. Select your repository, and set the **Build Settings**:
    - **Framework Preset**: `Next.js (Static HTML Export)`
    - **Build Command**: `npm run build`
-   - **Build Output Directory**: `frontend/out`
+   - **Build Output Directory**: `out`
    - **Root Directory**: `frontend`
 4. Add the **Environment Variable**:
    - `NEXT_PUBLIC_API_URL` = `https://api.alezonyth.my.id`
