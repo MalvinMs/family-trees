@@ -41,6 +41,7 @@ export interface Tree {
   persons: Person[];
   relationships: Relationship[];
   customFields?: CustomField[];
+  is_public?: boolean;
 }
 
 interface TreeState {
@@ -57,6 +58,7 @@ interface TreeState {
   fetchTreeDetail: (token: string, treeId: string) => Promise<void>;
   fetchPublicTreeDetail: (treeId: string) => Promise<void>;
   createTree: (token: string, name: string) => Promise<Tree | null>;
+  updateTree: (token: string, treeId: string, data: Partial<Tree>) => Promise<Tree | null>;
   importTree: (token: string, jsonData: string) => Promise<Tree | null>;
   deleteTree: (token: string, treeId: string) => Promise<void>;
   addPerson: (token: string, data: Omit<Person, 'id'>) => Promise<void>;
@@ -150,6 +152,32 @@ export const useTreeStore = create<TreeState>((set, get) => ({
       const newTree = await res.json();
       set((state) => ({ trees: [newTree, ...state.trees] }));
       return newTree;
+    } catch (err: any) {
+      set({ error: err.message });
+      return null;
+    }
+  },
+
+  updateTree: async (token, treeId, data) => {
+    try {
+      const res = await fetch(`${API_URL}/api/trees/${treeId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to update tree settings');
+      const updatedTree = await res.json();
+      set((state) => {
+        const trees = state.trees.map((t) => (t.id === treeId ? { ...t, ...updatedTree } : t));
+        const activeTree = state.activeTree && state.activeTree.id === treeId
+          ? { ...state.activeTree, ...updatedTree }
+          : state.activeTree;
+        return { trees, activeTree };
+      });
+      return updatedTree;
     } catch (err: any) {
       set({ error: err.message });
       return null;

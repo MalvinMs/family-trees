@@ -17,7 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore, Person, Relationship } from '../../../store/treeStore';
-import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download } from 'lucide-react';
+import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download, Globe, Copy, Check } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
@@ -52,10 +52,13 @@ export default function TreeWorkspacePage() {
     deletePersonLocal,
     addRelationshipLocal,
     deleteRelationshipLocal,
+    updateTree,
     loading,
   } = useTreeStore();
 
   const router = useRouter();
+
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // State for Canvas Nodes & Edges
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -489,6 +492,23 @@ export default function TreeWorkspacePage() {
     } finally {
       setInviting(false);
     }
+  };
+
+  const handleTogglePublic = async () => {
+    if (!activeTree || !token) return;
+    try {
+      await updateTree(token, activeTree.id, { is_public: !activeTree.is_public });
+    } catch (err: any) {
+      alert(err.message || 'Failed to toggle public settings');
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!activeTree) return;
+    const url = `${window.location.origin}/public/trees/${activeTree.id}`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -1308,6 +1328,74 @@ export default function TreeWorkspacePage() {
                 Only the tree creator/owner can manage sharing permissions and invite new editors/viewers.
               </div>
             )}
+
+            {/* Public Link Toggle & Copy Section */}
+            <div className={`p-4 rounded-xl border mb-6 ${
+              isDarkMode ? 'bg-[#121213] border-[#2c2c2e]' : 'bg-[#faf9f6] border-[#e6e5e0]'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe size={16} className="text-[#7b8e7f] dark:text-[#9cb2a2]" />
+                  <div className="text-left">
+                    <span className="text-xs font-semibold block">Public Archival View</span>
+                    <span className="text-[10px] text-slate-400 block font-light">Allow read-only unauthenticated access</span>
+                  </div>
+                </div>
+                {activeTree?.owner_id === user?.id ? (
+                  <button
+                    onClick={handleTogglePublic}
+                    className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 focus:outline-none flex items-center ${
+                      activeTree?.is_public 
+                        ? 'bg-[#7b8e7f] dark:bg-[#9cb2a2] justify-end' 
+                        : 'bg-slate-300 dark:bg-slate-700 justify-start'
+                    }`}
+                  >
+                    <span className="w-4 h-4 rounded-full bg-white shadow-xs" />
+                  </button>
+                ) : (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${
+                    activeTree?.is_public 
+                      ? 'bg-[#7b8e7f]/10 text-[#7b8e7f]' 
+                      : 'bg-slate-200/50 dark:bg-slate-800 text-slate-400'
+                  }`}>
+                    {activeTree?.is_public ? 'Active' : 'Private'}
+                  </span>
+                )}
+              </div>
+
+              {activeTree?.is_public && (
+                <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-white/5 space-y-2 text-left">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block">
+                    Public Shareable Link
+                  </span>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${typeof window !== 'undefined' ? window.location.origin : ''}/public/trees/${activeTree.id}`}
+                      className={`flex-1 px-3 py-1.5 rounded-lg border text-[11px] font-mono focus:outline-none select-all ${
+                        isDarkMode
+                          ? 'bg-[#1a1a1c] border-[#2c2c2e] text-slate-300'
+                          : 'bg-white border-[#e6e5e0] text-slate-600'
+                      }`}
+                    />
+                    <button
+                      onClick={handleCopyLink}
+                      className={`px-3 py-1.5 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 ${
+                        copiedLink
+                          ? 'bg-[#7b8e7f]/20 text-[#7b8e7f] dark:text-[#9cb2a2] dark:bg-[#9cb2a2]/20 border border-[#7b8e7f]/30'
+                          : isDarkMode
+                            ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                            : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      {copiedLink ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedLink ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* List of active collaborators */}
             <div className="space-y-4">

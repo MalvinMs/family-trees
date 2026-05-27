@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Multi-Environment Docker Compose Helper Script
+
+ENV=$1
+shift # Shift argument pointer so $@ has the remaining commands (e.g. up -d, down)
+
+if [ -z "$ENV" ]; then
+    echo "Usage: ./dc [dev|prod] [docker-compose commands]"
+    echo ""
+    echo "Examples:"
+    echo "  ./dc dev up -d"
+    echo "  ./dc dev build"
+    echo "  ./dc prod up -d --build"
+    echo "  ./dc prod down"
+    exit 1
+fi
+
+if [ "$ENV" = "dev" ]; then
+    echo "🚀 Running Docker Compose in DEVELOPMENT mode..."
+    docker compose -f docker-compose.dev.yml "$@"
+elif [ "$ENV" = "prod" ]; then
+    echo "🔒 Running Docker Compose in PRODUCTION mode (backend-only)..."
+    docker compose -f docker-compose.prod.yml "$@"
+else
+    echo "❌ Unknown environment: $ENV"
+    echo "Use either 'dev' or 'prod'."
+    exit 1
+fi

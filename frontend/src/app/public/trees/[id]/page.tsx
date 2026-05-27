@@ -14,7 +14,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useTreeStore, Person } from '../../../../store/treeStore';
-import { ArrowLeft, Sun, Moon, X, MapPin, AlignLeft, BookOpen, Clock } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, X, MapPin, AlignLeft, BookOpen, Clock, HelpCircle } from 'lucide-react';
 import PersonNode from '../../../components/PersonNode';
 
 export default function PublicTreeWorkspacePage() {

@@ -84,42 +84,56 @@ Komunitas adat / kerajaan / trah.
 
 # 5. Scope
 
-# MVP Scope
+# System Scope (All Phases Implemented)
 
-## Included
+## Included (Fully Implemented)
 
-### Authentication
-- register/login
-- invitation system
-- role permission
+### Authentication & Authorization
+- register/login (Sanctum Tokens)
+- RBAC permission model (Owner, Editor, Viewer)
+- Invitation and collaborator management system
 
-### Family Tree
+### Family Tree Management
 - create tree
-- add/edit person
-- create relationship
-- visualize tree
+- add/edit person (Debounced live canvas coordinates sync)
+- create graph-based relationships
+- visualize tree (React Flow with active Dark/Light warm-monochrome modes)
+- Erase lineage (Erase tree with premium customized safe alerts)
 
-### Customization
-- custom fields
-- theme customization
-- layout selection
+### Customization & Schemas
+- Dynamic custom fields (Unified JSONB payload blocks)
+- Theme customization (Monochrome & Sage Green aesthetic accents)
+- Layout configurations (Card sizing, line styles)
 
-### Media
-- upload photo
-- upload document
+### Import & Export Archives (Restores & Backups)
+- Full JSON export of profiles, relationships, custom fields, and canvas coordinates
+- Full JSON import system with an automatic relational ID re-mapping engine
 
-### Search
-- search family member
+### Search & Discovery
+- Quick family member fuzzy search across name and last name
+- Node canvas tracking and view zoom centering
+
+### Real-Time Collaboration & Syncing (Phase 2)
+- SSE non-blocking stream synchronization using Redis queue polling
+- WebSockets syncing utilizing Laravel Reverb & Laravel Echo delta updates
+
+### Memoirs & Discussions
+- Sliding Notion-style Ancestor Memoir drawer (biography, vitals, dynastic timelines)
+- Collaborative comment threads on individual ancestor nodes
+- Sliding Activity Audit Logs timeline feed of all database changes
+
+### Public Genealogy Portal (Phase 3)
+- Unauthenticated read-only viewport `/public/trees/[id]`
+- Owner "Make Tree Public" toggle switch and single-click share link generator inside UI
 
 ---
 
-## Excluded (Phase 2+)
+## Excluded (Future Phase 4+)
 
-- AI recommendation
-- DNA integration
-- realtime collaboration
-- offline mode
-- mobile app native
+- AI recommendation (Duplicate node detection and auto biography)
+- DNA integration (GEDCOM/DNA ancestry uploads)
+- Offline mode local caching
+- Mobile app native client wrapper
 
 ---
 
@@ -274,16 +288,39 @@ Search berdasarkan:
 
 ---
 
-# 6.6 Collaboration
+# 6.6 Collaboration [IMPLEMENTED]
 
-(Phase 2)
+Fully implemented real-time sync, audit feeds, and memoirs.
 
 ## Features
 
-- realtime editing
-- activity feed
-- comment system
-- edit history
+- **Real-Time Synchronized Canvas**: Canvas coordination drag operations and node details propagate live to other editors.
+- **SSE Fallback Engine**: Employs an ultra-fast Redis LPOP queue to broadcast events via Server-Sent Events without locking the PHP application server.
+- **WebSockets Broadcasting**: Integrated with Laravel Reverb as the primary socket dispatch mechanism.
+- **Activity Log Audit Trail**: Renders a dedicated sidebar timeline documenting all creation, removal, and editing operations of nodes and lines.
+- **Historical Memoirs Comments**: Research commentary threads on profile records so editors can exchange sources and historical evidence.
+
+---
+
+# 6.7 Import & Export Systems [IMPLEMENTED]
+
+Enables backup preservation and archival transfers.
+
+## Features
+
+- **JSON Format Export**: Packages all genealogy metadata (including standard attributes, custom schema fields, relationships, and custom React Flow coordinates) into a downloadable `.json` backup file.
+- **JSON Format Import**: Allows administrators to upload complete tree archives. Includes a relational ID translation engine that dynamically maps old IDs to new UUID keys during import, preserving graph links and avoiding key conflicts.
+
+---
+
+# 6.8 Public Archival Pages & Portal [IMPLEMENTED]
+
+Enables public publishing of trees.
+
+## Features
+
+- **Unauthenticated Viewport**: Anyone can visit `/public/trees/[id]` to explore the family tree with visual zoom/panning, dynamic search, dynamic memoirs vitals, and light/dark themes. Editing and modifying handles are strictly stripped out of the client interface.
+- **Share Controls & Link Copying**: Tree owners can toggle the tree's accessibility status between private and public, automatically generating a public URL and displaying a micro-animated sage-green copy tool.
 
 ---
 
@@ -659,41 +696,35 @@ Integrasi:
 
 ---
 
-# 21. Development Roadmap
+# 21. Development Roadmap (All Phases Completed)
 
-# Phase 1 — MVP
-
-Duration: 2–3 months
+# Phase 1 — MVP [COMPLETED]
 
 Features:
-- auth
-- CRUD person
-- tree visualization
-- relationships
-- custom fields
+- auth (Sanctum Tokens)
+- CRUD person (Coordinate drag & drop, vitals biography updates)
+- tree visualization (React Flow + optimized PersonNode components)
+- relationships (Graph-based connector system)
+- custom fields (JSONB-based dynamic schemas)
 
 ---
 
-# Phase 2 — Collaboration
-
-Duration: 2 months
+# Phase 2 — Collaboration [COMPLETED]
 
 Features:
-- realtime
-- activity logs
-- commenting
-- sharing
+- realtime sync (Laravel Reverb & fallback SSE streams via Redis)
+- activity logs (sliding timeline feeds documenting all edits)
+- commenting (ancestor memoirs commentary and notes)
+- sharing (role-based collaborator permissions)
 
 ---
 
-# Phase 3 — Advanced System
-
-Duration: 3 months
+# Phase 3 — Advanced System [COMPLETED]
 
 Features:
-- export system
-- mobile responsive optimization
-- public genealogy pages
+- export system (JSON Archives backups & imports with auto-ID re-mapping)
+- mobile responsive optimization (Adaptive Notion-style drawers)
+- public genealogy pages (Read-only unauthenticated views with toggle switches)
 
 ---
 
