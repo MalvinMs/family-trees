@@ -1,9 +1,6 @@
-'use client';
-
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import Link from 'next/link';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -11,10 +8,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, initialize } = useAuthStore();
-  const router = useRouter();
+  const navigate = useNavigate();
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Kinova';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const APP_NAME = import.meta.env.VITE_APP_NAME || 'Kinova';
 
   useEffect(() => {
     initialize();
@@ -22,9 +19,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/');
+      navigate('/');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +45,7 @@ export default function LoginPage() {
       }
 
       login(data.access_token, data.user);
-      router.push('/');
+      navigate('/');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -117,7 +114,7 @@ export default function LoginPage() {
 
         <p className="text-xs text-center text-slate-400 mt-8">
           Need access?{' '}
-          <Link href="/register" className="text-[#7b8e7f] hover:underline font-semibold">
+          <Link to="/register" className="text-[#7b8e7f] hover:underline font-semibold">
             Create an account
           </Link>
         </p>

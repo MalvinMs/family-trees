@@ -5,7 +5,7 @@ Kinova is a state-of-the-art, highly interactive, and collaborative family tree 
 ```mermaid
 graph TD
     %% Frontend Layer
-    CF[Cloudflare Pages - Next.js Static Web App] -->|HTTPS REST API| NG[Nginx Reverse Proxy on VPS]
+    CF[Vite React + TypeScript Static Web App] -->|HTTPS REST API| NG[Nginx Reverse Proxy on VPS]
     CF -->|WSS Real-Time Canvas Events| NG
 
     %% Reverse Proxy SSL Termination
@@ -26,11 +26,11 @@ graph TD
 
 Kinova is crafted with a warm-monochrome and sage-green design system. It is optimized to feel extremely responsive, visually lightweight, and rich in micro-animations.
 
-* **Frontend Client Workspace**: Next.js 15, React 19, Zustand State Store, and **React Flow** (custom interactive lineage canvas engine).
+* **Frontend Client Workspace**: React 19, Vite, React Router v6, Zustand State Store, and **React Flow** (custom interactive lineage canvas engine).
 * **Backend API Framework**: Laravel 13 (REST API, SSE Event streaming).
 * **Real-time Synchronization Engine**: Laravel Reverb (high-performance WebSockets broadcast engine, client-to-client drag coordinate whispering).
 * **Database & Caching**: PostgreSQL 16 (strict relational tracking), Redis 7 (job queue broker, caching).
-* **Deployment Channels**: Cloudflare Pages (Frontend CDN Edge), Docker Compose on VPS (Containerized Backend Stack behind Nginx SSL).
+* **Deployment Channels**: Vite Static SPA (VPS / Static Cloudflare Pages CDN), Docker Compose on VPS (Containerized Backend Stack behind Nginx SSL).
 
 ---
 

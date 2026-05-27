@@ -1,5 +1,5 @@
 import { BookOpen } from 'lucide-react';
-import { Person } from '../../../store/treeStore';
+import type { Person } from '../../../store/treeStore';
 
 interface RecentAncestorsProps {
   ancestors: Person[];

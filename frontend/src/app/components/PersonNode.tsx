@@ -1,7 +1,6 @@
-import React from 'react';
+import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { User, Sparkles } from 'lucide-react';
-import { Person } from '../../store/treeStore';
+import type { Person } from '../../store/treeStore';
 
 interface PersonNodeProps {
   id: string;
@@ -14,7 +13,7 @@ interface PersonNodeProps {
   };
 }
 
-function PersonNode({ id, selected, data }: PersonNodeProps) {
+function PersonNode({ id: _id, selected, data }: PersonNodeProps) {
   const { person, onEdit, onDelete } = data;
   const isDarkMode = data.isDarkMode ?? true;
   const isMale = person.gender === 'male';
@@ -129,7 +128,7 @@ function PersonNode({ id, selected, data }: PersonNodeProps) {
   );
 }
 
-export default React.memo(PersonNode, (prevProps, nextProps) => {
+export default memo(PersonNode, (prevProps, nextProps) => {
   return (
     prevProps.id === nextProps.id &&
     prevProps.selected === nextProps.selected &&

@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre';
-import { Node, Edge } from '@xyflow/react';
+import type { Node, Edge } from '@xyflow/react';
 
 // Match the exact rendered dimensions of PersonNode component
 const NODE_WIDTH = 220;

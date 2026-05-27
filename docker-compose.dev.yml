@@ -103,7 +103,7 @@ services:
       - REDIS_PORT=6379
     command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
 
-  # Next.js Frontend Service
+  # Vite React Frontend Service
   frontend:
     build:
       context: ./frontend
@@ -119,7 +119,7 @@ services:
       - backend
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8000
 
 volumes:
   postgres_data:

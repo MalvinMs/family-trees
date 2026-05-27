@@ -11,7 +11,7 @@ Instead of using Nginx Proxy Manager, this guide utilizes **regular, host-level 
 ```mermaid
 graph TD
     %% Public Access
-    User([User Clients / Next.js Frontend]) -- "HTTPS (Port 443)" --> HostNginx[Regular Host Nginx]
+    User([User Clients / Vite Frontend]) -- "HTTPS (Port 443)" --> HostNginx[Regular Host Nginx]
     
     subgraph "Host System (VPS)"
         HostNginx -- "Proxy to localhost:8000" --> Port8000[127.0.0.1:8000]
@@ -124,7 +124,7 @@ APP_ENV=production
 APP_DEBUG=false
 APP_KEY=base64:YOUR_SECURE_RANDOM_GENERATED_APP_KEY
 APP_URL=https://api.alezonyth.my.id
-FRONTEND_URL=https://kinova.alezonyth.my.id # Next.js frontend on Cloudflare Pages (CORS)
+FRONTEND_URL=https://kinova.alezonyth.my.id # Vite React frontend on Cloudflare Pages (CORS)
 
 DB_CONNECTION=pgsql
 DB_HOST=postgres
@@ -256,37 +256,30 @@ sudo systemctl status certbot.timer
 
 ---
 
-## ⚡ Part 2: Cloudflare Pages Frontend Deployment (Native Edge Integration)
+## ⚡ Part 2: Cloudflare Pages Frontend Deployment (Static Single Page App)
 
-By utilizing Cloudflare’s Edge runtime, Next.js runs natively inside Cloudflare Workers, supporting dynamic routes (like `/trees/[id]`), clean URLs, and Server-Side Rendering (SSR) with zero redirection configurations or 404 hacks.
+By utilizing Cloudflare Pages' static hosting, the React Vite Single Page App (SPA) runs extremely fast globally on Cloudflare's CDN, with client-side routing handled natively by React Router v6.
 
-### 1. Ensure Dynamic Routing is Active
-Verify that `/frontend/next.config.ts` (or `next.config.js`) does **not** contain `output: 'export'`. Next.js should run in dynamic mode:
-```typescript
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  // Configured for dynamic SSR / Edge deployment on Cloudflare Pages
-};
-
-export default nextConfig;
+### 1. Single Page Application Routing Redirects
+We have configured a `public/_redirects` file with the rule:
+```text
+/* /index.html 200
 ```
+This automatically instructs Cloudflare Pages to redirect all sub-routes (such as `/trees/3` or `/login`) to the main `index.html` file so that React Router can handle routing on the client side smoothly.
 
 ### 2. Connect Git Repo and Configure Build Settings
 1. Log into your **Cloudflare Dashboard**.
 2. Go to **Workers & Pages** -> **Create Application** -> **Pages** -> **Connect to Git**.
 3. Select your repository containing the genealogy tree codebase.
 4. Set the **Build Settings** in the connection wizard:
-   - **Framework Preset**: `None`
-   - **Build Command**: `npx @cloudflare/next-on-pages`
-   - **Build Output Directory**: `.vercel/output`
+   - **Framework Preset**: `Vite`
+   - **Build Command**: `npm run build`
+   - **Build Output Directory**: `dist`
    - **Root Directory**: `frontend`
-
-*Note: The `npx @cloudflare/next-on-pages` build command automatically compiles your Next.js application and packages it directly inside `.vercel/output` to run on the global Cloudflare Edge network.*
 
 ### 3. Inject Production Environmental Variables
 Navigate to your Cloudflare Pages project **Settings** -> **Environment Variables** and add:
-- `NEXT_PUBLIC_API_URL` = `https://api.alezonyth.my.id`
+- `VITE_API_URL` = `https://api.alezonyth.my.id`
 
 ### 4. Deploy
-Click **Save and Deploy**. Cloudflare compiles your Next.js application and hosts it natively. You can easily bind your custom domain (e.g. `family-tree.malvin.web.id`) in the **Custom Domains** tab. All dynamic paths and clean URLs will now resolve natively!
+Click **Save and Deploy**. Cloudflare compiles your Vite application and hosts it natively on the global CDN. All dynamic paths and clean URLs will resolve perfectly!

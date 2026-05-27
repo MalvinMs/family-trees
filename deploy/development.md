@@ -72,7 +72,7 @@ We use the `./dc` tool (Bash) or `.\dc.ps1` (PowerShell on Windows) to launch en
 
 Once the stack is successfully built and launched, you can access individual services:
 
-* **Next.js Frontend Client**: `http://localhost:3000`
+* **Vite React Frontend Client**: `http://localhost:3000` (or `http://localhost:5173` via local npm run dev)
 * **Laravel Backend API REST Services**: `http://localhost:8000`
 * **Zustand Echo WebSockets (Reverb)**: `ws://localhost:8080`
 * **Admin Login Details**:
@@ -85,7 +85,7 @@ Once the stack is successfully built and launched, you can access individual ser
 
 The development orchestrator spins up the following local containers:
 
-1. **`kinova_frontend`** (Node.js/Next.js/React Flow canvas workspace)
+1. **`kinova_frontend`** (Node.js/Vite/React Flow canvas workspace)
 2. **`kinova_backend`** (PHP-FPM/Laravel 11 REST API engine)
 3. **`kinova_reverb`** (Laravel Reverb high-performance WebSocket server)
 4. **`kinova_queue`** (Laravel background Redis queue listener worker)

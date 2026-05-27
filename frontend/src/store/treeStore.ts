@@ -88,7 +88,7 @@ interface TreeState {
   saveBulkPositions: (token: string, treeId: string, positions: { id: string; x: number; y: number }[]) => Promise<void>;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export const useTreeStore = create<TreeState>((set, get) => ({
   trees: [],
@@ -630,7 +630,6 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     }
   },
 
-  // Optimistic O(n) bulk patch of all node positions in Zustand (no API call)
   updateMultipleNodesPositionsLocal: (positions) => {
     const activeTree = get().activeTree;
     if (!activeTree) return;
@@ -658,7 +657,6 @@ export const useTreeStore = create<TreeState>((set, get) => ({
     });
   },
 
-  // Persist bulk layout positions to PostgreSQL via backend, then Reverb broadcasts
   saveBulkPositions: async (token, treeId, positions) => {
     try {
       const res = await fetch(`${API_URL}/api/trees/${treeId}/nodes/positions`, {

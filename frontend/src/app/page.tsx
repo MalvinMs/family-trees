@@ -1,11 +1,8 @@
-'use client';
-
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTreeStore } from '../store/treeStore';
-import { Plus, LogOut, Network, Calendar, Award, Compass, CompassIcon, BookOpen, Clock, Heart, Sun, Moon, Upload, Trash2, User } from 'lucide-react';
-import Link from 'next/link';
+import { Network, Calendar, Trash2 } from 'lucide-react';
 import Header from './components/dashboard/Header';
 import MetricsGrid from './components/dashboard/MetricsGrid';
 import DynasticMilestones from './components/dashboard/DynasticMilestones';
@@ -37,7 +34,7 @@ export default function DashboardPage() {
   const [treeToDelete, setTreeToDelete] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const router = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => {
     initialize();
@@ -67,11 +64,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isAuthenticated && !localStorage.getItem('auth_token')) {
-      router.push('/login');
+      navigate('/login');
     } else if (token) {
       fetchTrees(token);
     }
-  }, [isAuthenticated, token, router]);
+  }, [isAuthenticated, token, navigate]);
 
   // Populate profile inputs on opening modal
   useEffect(() => {
@@ -120,7 +117,7 @@ export default function DashboardPage() {
     if (created) {
       setNewTreeName('');
       setShowCreateModal(false);
-      router.push(`/trees/${created.id}`);
+      navigate(`/trees/${created.id}`);
     }
   };
 
@@ -136,7 +133,7 @@ export default function DashboardPage() {
         const imported = await importTree(token, content);
         setCreating(false);
         if (imported) {
-          router.push(`/trees/${imported.id}`);
+          navigate(`/trees/${imported.id}`);
         } else {
           alert('Failed to import tree archive.');
         }
@@ -165,7 +162,7 @@ export default function DashboardPage() {
 
   const handleLogout = () => {
     logout();
-    router.push('/login');
+    navigate('/login');
   };
 
   if (loading && trees.length === 0) {
@@ -298,7 +295,7 @@ export default function DashboardPage() {
                   {trees.map((tree) => (
                     <div
                       key={tree.id}
-                      onClick={() => router.push(`/trees/${tree.id}`)}
+                      onClick={() => navigate(`/trees/${tree.id}`)}
                       className="group flex items-center justify-between p-5 rounded-xl border border-[#e6e5e0] dark:border-[#2c2c2e] hover:border-[#7b8e7f]/40 dark:hover:border-[#9cb2a2]/40 hover:bg-[#faf9f6]/40 dark:hover:bg-white/2 cursor-pointer transition-all"
                     >
                       <div className="space-y-1">
