@@ -9,7 +9,7 @@ graph TD
     CF -->|WSS Real-Time Canvas Events| NG
 
     %% Reverse Proxy SSL Termination
-    NG -->|HTTP Port 8000| LV[Laravel 11 REST API Container]
+    NG -->|HTTP Port 8000| LV[Laravel 13 REST API Container]
     NG -->|WS Port 8080| RV[Laravel Reverb WebSocket Server Container]
 
     %% Internal Stack Layer
@@ -27,7 +27,7 @@ graph TD
 Kinova is crafted with a warm-monochrome and sage-green design system. It is optimized to feel extremely responsive, visually lightweight, and rich in micro-animations.
 
 * **Frontend Client Workspace**: Next.js 15, React 19, Zustand State Store, and **React Flow** (custom interactive lineage canvas engine).
-* **Backend API Framework**: Laravel 11 (REST API, SSE Event streaming).
+* **Backend API Framework**: Laravel 13 (REST API, SSE Event streaming).
 * **Real-time Synchronization Engine**: Laravel Reverb (high-performance WebSockets broadcast engine, client-to-client drag coordinate whispering).
 * **Database & Caching**: PostgreSQL 16 (strict relational tracking), Redis 7 (job queue broker, caching).
 * **Deployment Channels**: Cloudflare Pages (Frontend CDN Edge), Docker Compose on VPS (Containerized Backend Stack behind Nginx SSL).

@@ -1,9 +1,7 @@
 FROM php:8.4-fpm
 
-# Install system dependencies including Nginx and Supervisor
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    nginx \
-    supervisor \
     git \
     curl \
     libpng-dev \
@@ -25,20 +23,25 @@ RUN pecl install redis && docker-php-ext-enable redis
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # Set working directory
-WORKDIR /var/www/html
+WORKDIR /var/www
 
 # Copy application files
 COPY . .
 
-# Copy docker configs
-COPY docker/nginx.conf /etc/nginx/sites-available/default
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Run composer install to compile vendor dependencies
+ENV COMPOSER_ALLOW_SUPERUSER=1
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Setup logs and permissions
-RUN mkdir -p /var/log/supervisor /var/run/ \
-    && chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# Setup permissions for production
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
 
-EXPOSE 80
+# Expose ports
+EXPOSE 8000
+EXPOSE 8080
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Switch to non-root user for security
+USER www-data
+
+# Default CMD (can be overridden by docker-compose)
+CMD ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]

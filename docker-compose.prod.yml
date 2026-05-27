@@ -1,67 +1,140 @@
 services:
-  # Database Service (PostgreSQL)
-  db:
-    image: postgres:15-alpine
-    container_name: kinova-db-prod
+  # Database Service (PostgreSQL 16)
+  postgres:
+    image: postgres:16-alpine
+    container_name: kinova_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_DATABASE:-kinova}
-      POSTGRES_USER: ${DB_USERNAME:-kinova_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-kinova_password}
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - db-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Cache & Queue Driver Service (Redis)
-  cache:
+  # Cache Service (Redis 7)
+  redis:
     image: redis:7-alpine
-    container_name: kinova-cache-prod
+    container_name: kinova_redis
     restart: unless-stopped
     volumes:
-      - redis-data:/data
+      - redis_data:/data
     networks:
       - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Unified Laravel Application Service (PHP-FPM, Nginx, Supervisord, Reverb, Queue Worker)
-  app:
-    container_name: kinova-backend-prod
+  # Laravel REST API Backend Service
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    container_name: kinova_backend
     restart: unless-stopped
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
       DB_CONNECTION: pgsql
-      DB_HOST: db
+      DB_HOST: postgres
       DB_PORT: 5432
-      DB_DATABASE: ${DB_DATABASE:-kinova}
-      DB_USERNAME: ${DB_USERNAME:-kinova_user}
-      DB_PASSWORD: ${DB_PASSWORD:-kinova_password}
-      REDIS_HOST: cache
-      REVERB_APP_ID: ${REVERB_APP_ID:-kinova_app_id}
-      REVERB_APP_KEY: ${REVERB_APP_KEY:-kinova_app_key}
-      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-kinova_app_secret}
-      REVERB_HOST: ${REVERB_HOST:-api.yourdomain.com}
-      REVERB_PORT: 443
-      REVERB_SCHEME: https
-    volumes:
-      - app-storage:/var/www/html/storage
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PHP_CLI_SERVER_WORKERS: 4
     depends_on:
-      - db
-      - cache
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - internal
-      - proxy-net   # Connects Laravel to your Nginx Proxy Manager network
+      - proxy-net
+
+  # Laravel Queue Worker
+  queue:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: kinova_queue
+    restart: unless-stopped
+    command: ["php", "artisan", "queue:work", "--sleep=3", "--tries=3", "--max-time=3600"]
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # Laravel Reverb WebSocket Server
+  reverb:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: kinova_reverb
+    restart: unless-stopped
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REVERB_APP_ID: ${REVERB_APP_ID}
+      REVERB_APP_KEY: ${REVERB_APP_KEY}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET}
+      REVERB_HOST: ${REVERB_HOST}
+      REVERB_PORT: 8080
+      REVERB_SCHEME: https
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - proxy-net
 
 volumes:
-  app-storage:
-  db-data:
-  redis-data:
+  postgres_data:
+  redis_data:
 
 networks:
   internal:
     driver: bridge
   proxy-net:
-    external: true   # Custom network managed by your Nginx Proxy Manager
+    external: true

@@ -1,26 +1,54 @@
 # Kinova Production Stack Setup Guide
 
-This guide describes the complete workflow to deploy the Kinova production backend stack onto a Virtual Private Server (VPS) and compile/deploy the Next.js frontend onto Cloudflare Pages.
+This guide describes the complete workflow to deploy the Kinova production backend stack onto a Virtual Private Server (VPS) that utilizes **Nginx Proxy Manager (NPM)** as a global reverse proxy, and compile/deploy the Next.js frontend onto **Cloudflare Pages**.
 
 ---
 
 ## 🏗️ System Architecture Overview
 
+```mermaid
+graph TD
+    %% Public Access
+    User([User Clients / Next.js Frontend]) -- "HTTPS (Port 443)" --> NPM[Nginx Proxy Manager]
+    
+    subgraph External Network: proxy-net
+        NPM -- "api.alezonyth.my.id (8000)" --> kinova_backend["kinova_backend (Laravel 13 API)"]
+        NPM -- "ws.alezonyth.my.id (8080)" --> kinova_reverb["kinova_reverb (Laravel Reverb WS)"]
+    end
+    
+    subgraph Internal Bridge Network: internal
+        kinova_backend -- "TCP (5432)" --> kinova_postgres[(kinova_postgres:16-alpine)]
+        kinova_backend -- "TCP (6379)" --> kinova_redis[(kinova_redis:7-alpine)]
+        
+        kinova_reverb -- "TCP (5432)" --> kinova_postgres
+        kinova_reverb -- "TCP (6379)" --> kinova_redis
+        
+        kinova_queue["kinova_queue (Laravel Queue Worker)"] -- "TCP (5432)" --> kinova_postgres
+        kinova_queue -- "TCP (6379)" --> kinova_redis
+    end
+    
+    %% Storage Volumes
+    kinova_postgres -.-> pg_vol[(postgres_data Volume)]
+    kinova_redis -.-> rd_vol[(redis_data Volume)]
+```
+
 In a production environment:
-1. **Next.js Frontend**: Compiled as a static export and hosted globally on **Cloudflare Pages** (with edge-cached low latency CDN delivery).
-2. **Laravel Backend Stack**: Managed via Docker Compose containing only the API, Queue Worker, Reverb WebSockets, Postgres, and Redis containers on the **VPS**.
-3. **Nginx Reverse Proxy**: Acts as the SSL terminator, proxying HTTP requests to the Laravel API and Upgrading WebSocket connections to Reverb.
+1. **Next.js Frontend**: Hosted separately on **Cloudflare Pages** (static export) and served globally via Cloudflare CDN.
+2. **Nginx Proxy Manager (NPM)**: Already running globally on the VPS, handling wildcard Let's Encrypt certificates (`*.alezonyth.my.id`) via Cloudflare DNS challenge. Only ports `80` and `443` are exposed publicly.
+3. **Kinova Backend Services**: Built in isolated Docker containers:
+   - Only `backend` and `reverb` containers join the external `proxy-net` network to be reachable by NPM.
+   - `postgres`, `redis`, and the `queue` worker remain inside an isolated internal bridge network (`internal`) and are **never** exposed to the public internet.
 
 ---
 
 ## 🔒 Part 1: Production VPS Backend Deployment
 
 ### 1. Prerequisites
-Ensure your VPS is running Ubuntu 22.04 LTS (or similar) with Docker, Docker Compose, Nginx, and Certbot installed:
-```bash
-sudo apt update
-sudo apt install -y docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
-```
+- A VPS running with Docker and Docker Compose.
+- **Nginx Proxy Manager (NPM)** running inside a Docker network named `proxy-net`. If the network does not exist yet, create it on the VPS:
+  ```bash
+  docker network create proxy-net
+  ```
 
 ### 2. Clone the Repository
 Clone the codebase into the target production web root:
@@ -32,116 +60,123 @@ cd /var/www/family-trees
 ```
 
 ### 3. Configure Laravel Production Environment
-Create the production environment file at `/var/www/family-trees/backend/.env`:
+Copy the production environment template to `.env` in the root folder:
+```bash
+cp .env.prod.example .env
+nano .env
+```
+
+Define all the required secrets and variables inside the `.env` file:
 ```env
 APP_NAME=Kinova
 APP_ENV=production
-APP_KEY=base64:YOUR_GENERATE_APP_KEY_HERE
 APP_DEBUG=false
-APP_URL=https://api.yourdomain.com
+APP_KEY=base64:YOUR_SECURE_RANDOM_GENERATED_APP_KEY # Run 'php artisan key:generate' on dev to generate
+APP_URL=https://api.alezonyth.my.id
+FRONTEND_URL=https://kinova.alezonyth.my.id # Cloudflare Pages domain (CORS)
 
 DB_CONNECTION=pgsql
 DB_HOST=postgres
 DB_PORT=5432
 DB_DATABASE=kinova_production
 DB_USERNAME=kinova_prod_user
-DB_PASSWORD=YOUR_HIGH_SECURITY_DATABASE_PASSWORD_HERE
+DB_PASSWORD=YOUR_HIGH_SECURITY_DATABASE_PASSWORD
 
 REDIS_HOST=redis
 REDIS_PORT=6379
+REDIS_PASSWORD=YOUR_HIGH_SECURITY_REDIS_PASSWORD
 
 QUEUE_CONNECTION=redis
 
-REVERB_APP_ID=876543
-REVERB_APP_KEY=kinovaprodkey
-REVERB_APP_SECRET=kinovaprodsecret
-REVERB_HOST=reverb
+BROADCAST_CONNECTION=reverb
+
+REVERB_APP_ID=kinova_prod_app_id
+REVERB_APP_KEY=kinova_prod_app_key
+REVERB_APP_SECRET=kinova_prod_app_secret
+REVERB_HOST=ws.alezonyth.my.id
 REVERB_PORT=8080
 REVERB_SCHEME=https
 
-CORS_ALLOWED_ORIGINS=https://family.yourdomain.com
+PHP_CLI_SERVER_WORKERS=4
 ```
 
 > [!IMPORTANT]
-> Change the `APP_KEY`, `DB_PASSWORD`, and Reverb details with custom, randomly-generated high-security credentials before launching.
+> Change the `APP_KEY`, `DB_PASSWORD`, `REDIS_PASSWORD`, and Reverb details with unique, randomly-generated credentials before launching.
 
-### 4. Configure CORS Security Best Practices
-To ensure secure cross-origin requests from your Cloudflare Pages frontend to the Laravel API backend, configure the allowed origins explicitly:
-* **Production**: Set `CORS_ALLOWED_ORIGINS=https://family.yourdomain.com` in your backend `.env` matching your custom frontend domain.
-* **Security Rules**: Do not use `*` (wildcard `Access-Control-Allow-Origin`) in production when `supports_credentials => true` is active, as modern browsers strictly block session cookies and authorization headers on wildcard origins.
+---
 
-### 5. Spin Up the Backend Services
-Launch the production containers using the `prod` compose orchestrator profile:
+### 4. Deploy and Run the Stack
+We have automated the deployment pipeline using a bash script. The deployment script handles pulling the latest code from GitHub, rebuilding images without cache, ensuring database health, running migrations, caching Laravel assets, and restarting containers gracefully.
+
+Make the script executable and run it:
 ```bash
-# Allow script execution
-chmod +x dc
-./dc prod up -d --build
-```
-This boots:
-* `kinova_postgres` (relational database, isolated internally)
-* `kinova_redis` (in-memory broker, isolated internally)
-* `kinova_backend` (production PHP-FPM API server)
-* `kinova_queue` (Laravel background async queue listener)
-* `kinova_reverb` (Laravel WebSocket server)
-
-### 6. Build Database Tables & Optimize Cache
-Run production migrations and optimize the Laravel framework configuration files inside the container:
-```bash
-# Migrate database tables
-docker compose -f docker-compose.prod.yml exec backend php artisan migrate --force
-
-# Cache routes, configs, and events for maximum production speed
-docker compose -f docker-compose.prod.yml exec backend php artisan optimize
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-### 7. Configure Nginx Reverse Proxy
-Create a new Virtual Host configuration file:
-```bash
-sudo nano /etc/nginx/sites-available/kinova-api
-```
+#### What the deploy script does under the hood:
+1. Performs `git pull origin main` to pull latest changes.
+2. Rebuilds production images with zero-cache (`docker compose -f docker-compose.prod.yml build --no-cache`).
+3. Boots up `postgres` and `redis`, waiting until healthchecks report them as **healthy**.
+4. Boots up `backend` and executes forced migrations (`php artisan migrate --force`).
+5. Optimizes Laravel performance inside the container (`php artisan optimize` caches config, routes, and views).
+6. Gracefully recreates/restarts `backend`, `queue`, and `reverb` services (`docker compose -f docker-compose.prod.yml up -d --force-recreate`).
+7. Prunes dangling Docker build images to keep VPS storage clean (`docker image prune -f`).
 
-Paste the following reverse-proxy virtual host layout:
-```nginx
-server {
-    listen 80;
-    server_name api.yourdomain.com;
+---
 
-    # Standard Laravel API Proxy
-    location / {
-        proxy_pass http://127.0.0.1:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
+### 5. Configure Nginx Proxy Manager (NPM) GUI
 
-    # Upgraded WebSockets Laravel Reverb Proxy
-    location /app {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-    }
-}
-```
+To expose the services, log in to your Nginx Proxy Manager dashboard and add the following two Proxy Hosts:
 
-Enable the site configuration and restart Nginx:
-```bash
-sudo ln -s /etc/nginx/sites-available/kinova-api /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
-```
+#### A. API Routing Host (`api.alezonyth.my.id`)
+* **Detail Tab**:
+  - **Domain Names**: `api.alezonyth.my.id`
+  - **Scheme**: `http`
+  - **Forward Hostname / IP**: `kinova_backend` *(Docker container name)*
+  - **Forward Port**: `8000`
+  - **Block Common Exploits**:  *On*
+  - **Websockets Support**: ❌ *Off*
+* **SSL Tab**:
+  - **SSL Certificate**: Select the existing wildcard certificate `*.alezonyth.my.id`
+  - **Force SSL**:  *On*
+  - **HTTP/2 Support**:  *On*
+  - **HSTS Enabled**:  *On*
 
-### 8. Secure SSL Certificates with Let's Encrypt
-Automatically procure and install Let's Encrypt SSL certificates:
-```bash
-sudo certbot --nginx -d api.yourdomain.com
-```
+#### B. WebSocket Routing Host (`ws.alezonyth.my.id`)
+* **Detail Tab**:
+  - **Domain Names**: `ws.alezonyth.my.id`
+  - **Scheme**: `http`
+  - **Forward Hostname / IP**: `kinova_reverb` *(Docker container name)*
+  - **Forward Port**: `8080`
+  - **Block Common Exploits**:  *On*
+  - **Websockets Support**:  *On (CRITICAL - enables WebSocket Connection upgrades)*
+* **SSL Tab**:
+  - **SSL Certificate**: Select the existing wildcard certificate `*.alezonyth.my.id`
+  - **Force SSL**:  *On*
+  - **HTTP/2 Support**:  *On*
+  - **HSTS Enabled**:  *On*
+* **Advanced Tab**:
+  Paste the following custom block inside the **Custom Nginx Configuration** text area. This disables response buffering (ensures real-time push latency) and prevents Nginx from severing idle WebSocket connections:
+  ```nginx
+  proxy_http_version 1.1;
+
+  # Forward proper protocol properties
+  proxy_set_header Host $http_host;
+  proxy_set_header Scheme $scheme;
+  proxy_set_header SERVER_PORT $server_port;
+  proxy_set_header REMOTE_ADDR $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+  # Handshake upgrade lines
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "Upgrade";
+
+  # Performance optimizations for WebSockets
+  proxy_buffering off;
+  proxy_read_timeout 86400s; # Keep connection open up to 24 hours without message activity
+  proxy_send_timeout 86400s;
+  ```
 
 ---
 
@@ -150,7 +185,7 @@ sudo certbot --nginx -d api.yourdomain.com
 Deploying the Next.js static application on Cloudflare Pages guarantees low latency and global edge acceleration.
 
 ### 1. Set Up Static Exports Config
-Ensure `/frontend/next.config.js` or `next.config.mjs` is configured to render static static-site builds (`output: 'export'`) with unoptimized images:
+Ensure `/frontend/next.config.js` or `next.config.mjs` is configured to render static-site builds (`output: 'export'`) with unoptimized images:
 ```javascript
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -178,7 +213,7 @@ Define these parameters during the connection wizard:
 
 ### 4. Inject Production Environmental Variables
 Navigate to your Cloudflare Pages project **Settings** -> **Environment Variables** and add:
-* `NEXT_PUBLIC_API_URL` = `https://api.yourdomain.com` (Your secure VPS API domain)
+* `NEXT_PUBLIC_API_URL` = `https://api.alezonyth.my.id` (Your secure VPS API domain)
 
 ### 5. Deploy
-Click **Save and Deploy**. Cloudflare compiles your Next.js application into static files and serves them across their globally distributed CDN edges. You can easily bind a custom domain in the **Custom Domains** tab.
+Click **Save and Deploy**. Cloudflare compiles your Next.js application into static files and serves them across their globally distributed CDN edges. You can easily bind a custom domain (e.g., `kinova.alezonyth.my.id`) in the **Custom Domains** tab.
