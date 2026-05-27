@@ -17,11 +17,12 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore, Person, Relationship } from '../../../store/treeStore';
-import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download, Globe, Copy, Check, Menu, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download, Globe, Copy, Check, Menu, MoreHorizontal, Sparkles } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
 import DeleteTreeModal from '../../components/dashboard/DeleteTreeModal';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import { getAutoLayoutedNodes } from '../../utils/layoutUtils';
 
 export default function TreeWorkspacePage() {
   const { id } = useParams() as { id: string };
@@ -53,6 +54,8 @@ export default function TreeWorkspacePage() {
     deletePersonLocal,
     addRelationshipLocal,
     deleteRelationshipLocal,
+    updateMultipleNodesPositionsLocal,
+    saveBulkPositions,
     updateTree,
     deleteTree,
     loading,
@@ -219,6 +222,16 @@ export default function TreeWorkspacePage() {
         }
         fetchActivities(token, id);
       })
+      .listen('.BulkPositionsUpdated', (e: { positions: { id: string; x: number; y: number }[] }) => {
+        // Peer canvas: snap all nodes to the new auto-layout positions instantly
+        updateMultipleNodesPositionsLocal(e.positions);
+        setNodes((prevNodes) =>
+          prevNodes.map((node) => {
+            const match = e.positions.find((p) => p.id === node.id);
+            return match ? { ...node, position: { x: match.x, y: match.y } } : node;
+          })
+        );
+      })
       .listenForWhisper('node-dragging', (data: { id: string; x: number; y: number }) => {
         // Optimistic, ultra-fast client-to-client drag update at 60 FPS!
         patchNodePositionSSE(data.id, data.x, data.y);
@@ -299,6 +312,7 @@ export default function TreeWorkspacePage() {
         animated,
         style: { stroke: strokeColor, strokeWidth: 1.5 }, // Thin minimalist custom colors
         type: 'smoothstep',
+        data: { relationType: rel.relation_type },
       };
     });
 
@@ -380,6 +394,33 @@ export default function TreeWorkspacePage() {
   const onConnectEnd = useCallback(() => {
     setIsConnecting(false);
   }, []);
+
+  // Auto-Layout: compute Dagre positions, patch local canvas, persist to DB
+  const handleTriggerAutoLayout = useCallback(async () => {
+    if (!activeTree || !token || nodes.length === 0) return;
+
+    setConfirmDialog({
+      show: true,
+      title: 'Auto-Arrange Family Tree',
+      message: 'Automatically re-arrange all family nodes into a clean generational hierarchy? This will reposition all cards and save to the database.',
+      onConfirm: async () => {
+        // 1. Calculate optimal positions using Dagre
+        const newPositions = getAutoLayoutedNodes(nodes, edges, 'TB');
+
+        // 2. Instant optimistic local update (60 FPS, no flicker)
+        updateMultipleNodesPositionsLocal(newPositions);
+        setNodes((prevNodes) =>
+          prevNodes.map((node) => {
+            const match = newPositions.find((p) => p.id === node.id);
+            return match ? { ...node, position: { x: match.x, y: match.y } } : node;
+          })
+        );
+
+        // 3. Persist to PostgreSQL and broadcast to collaborators via Reverb
+        await saveBulkPositions(token, activeTree.id, newPositions);
+      },
+    });
+  }, [activeTree, token, nodes, edges, updateMultipleNodesPositionsLocal, saveBulkPositions, setNodes]);
 
   // Edge Deletion Handler (When user clicks a line and presses Backspace/Delete on keyboard)
   const onEdgesDelete = useCallback(
@@ -727,6 +768,20 @@ export default function TreeWorkspacePage() {
               <History size={18} />
             </button>
 
+            {/* Auto-Arrange Layout Button */}
+            <button
+              onClick={handleTriggerAutoLayout}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border shadow-xl transition-all text-xs font-semibold pointer-events-auto ${
+                isDarkMode
+                  ? 'bg-[#9cb2a2]/10 border-[#9cb2a2]/20 text-[#9cb2a2] hover:bg-[#9cb2a2]/20 hover:text-white'
+                  : 'bg-[#7b8e7f]/10 border-[#7b8e7f]/30 text-[#7b8e7f] hover:bg-[#7b8e7f]/20 hover:text-[#4e6153]'
+              }`}
+              title="Automatically arrange all family nodes into a clean generational hierarchy"
+            >
+              <Sparkles size={14} />
+              <span className="hidden lg:inline">Auto-Arrange</span>
+            </button>
+
             {/* Export Dropdown */}
             <div className="relative pointer-events-auto">
               <button
@@ -897,6 +952,19 @@ export default function TreeWorkspacePage() {
               </button>
 
               <div className={`border-t my-1 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`} />
+
+              <button
+                onClick={() => {
+                  handleTriggerAutoLayout();
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'text-[#9cb2a2] hover:bg-white/5 hover:text-white' : 'text-[#7b8e7f] hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                <Sparkles size={14} />
+                Auto-Arrange
+              </button>
 
               <button
                 onClick={() => {

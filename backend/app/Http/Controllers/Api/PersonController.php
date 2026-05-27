@@ -9,7 +9,9 @@ use App\Models\ActivityLog;
 use App\Events\PersonCreated;
 use App\Events\PersonUpdated;
 use App\Events\PersonDeleted;
+use App\Events\BulkPositionsUpdated;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PersonController extends Controller
 {
@@ -171,5 +173,37 @@ class PersonController extends Controller
         event(new PersonDeleted($tree->id, $id));
 
         return response()->json(['message' => 'Person removed from tree successfully']);
+    }
+
+    /**
+     * Bulk update canvas positions for all nodes (Auto-Layout engine).
+     * Runs in an atomic DB transaction and broadcasts to all Reverb peers.
+     */
+    public function updatePositionsBulk(Request $request, string $tree)
+    {
+        $request->validate([
+            'positions'       => ['required', 'array'],
+            'positions.*.id'  => ['required', 'uuid', 'exists:persons,id'],
+            'positions.*.x'   => ['required', 'numeric'],
+            'positions.*.y'   => ['required', 'numeric'],
+        ]);
+
+        $treeModel = $this->authorizeEditor($request->user(), $tree);
+
+        DB::transaction(function () use ($request, $tree) {
+            foreach ($request->positions as $pos) {
+                $person = Person::where('tree_id', $tree)->findOrFail($pos['id']);
+
+                $uiMetadata        = $person->ui_metadata ?? [];
+                $uiMetadata['x']   = (float) $pos['x'];
+                $uiMetadata['y']   = (float) $pos['y'];
+
+                $person->update(['ui_metadata' => $uiMetadata]);
+            }
+        });
+
+        event(new BulkPositionsUpdated($tree, $request->positions));
+
+        return response()->json(['message' => 'Node positions updated successfully.']);
     }
 }

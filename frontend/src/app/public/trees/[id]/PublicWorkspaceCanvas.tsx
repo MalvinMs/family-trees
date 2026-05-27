@@ -102,6 +102,7 @@ export default function PublicTreeWorkspacePage() {
           strokeWidth: 1.5,
           strokeDasharray: strokeDash,
         },
+        data: { relationType: rel.relation_type },
       };
     });
 

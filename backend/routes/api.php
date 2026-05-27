@@ -41,6 +41,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('persons/{id}', [PersonController::class, 'update']);
     Route::delete('persons/{id}', [PersonController::class, 'destroy']);
 
+    // Bulk position update for canvas auto-layout engine
+    Route::post('trees/{tree}/nodes/positions', [PersonController::class, 'updatePositionsBulk']);
+
     // Relationship Management (Graph link CRUD)
     Route::post('relationships', [RelationshipController::class, 'store']);
     Route::delete('relationships/{id}', [RelationshipController::class, 'destroy']);

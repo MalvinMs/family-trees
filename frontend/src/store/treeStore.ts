@@ -84,6 +84,8 @@ interface TreeState {
   deletePersonLocal: (personId: string) => void;
   addRelationshipLocal: (relationship: Relationship) => void;
   deleteRelationshipLocal: (relationshipId: string) => void;
+  updateMultipleNodesPositionsLocal: (positions: { id: string; x: number; y: number }[]) => void;
+  saveBulkPositions: (token: string, treeId: string, positions: { id: string; x: number; y: number }[]) => Promise<void>;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -625,6 +627,54 @@ export const useTreeStore = create<TreeState>((set, get) => ({
           ),
         },
       });
+    }
+  },
+
+  // Optimistic O(n) bulk patch of all node positions in Zustand (no API call)
+  updateMultipleNodesPositionsLocal: (positions) => {
+    const activeTree = get().activeTree;
+    if (!activeTree) return;
+
+    const positionMap = new Map(positions.map((p) => [p.id, p]));
+
+    set({
+      activeTree: {
+        ...activeTree,
+        persons: activeTree.persons.map((p) => {
+          const match = positionMap.get(p.id);
+          if (match) {
+            return {
+              ...p,
+              ui_metadata: {
+                ...p.ui_metadata,
+                x: match.x,
+                y: match.y,
+              },
+            };
+          }
+          return p;
+        }),
+      },
+    });
+  },
+
+  // Persist bulk layout positions to PostgreSQL via backend, then Reverb broadcasts
+  saveBulkPositions: async (token, treeId, positions) => {
+    try {
+      const res = await fetch(`${API_URL}/api/trees/${treeId}/nodes/positions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ positions }),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || 'Failed to save auto-layout positions.');
+      }
+    } catch (err: any) {
+      set({ error: err.message });
     }
   },
 }));
