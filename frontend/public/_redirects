@@ -1,0 +1,3 @@
+# Single Page Application (SPA) Router Fallback for Cloudflare Pages
+# Rewrites all requests that don't match static files to the root index.html so Next.js client router takes over
+/* /index.html 200
