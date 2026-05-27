@@ -13,6 +13,7 @@ interface AuthState {
   login: (token: string, user: User) => void;
   logout: () => void;
   initialize: () => void;
+  updateProfile: (token: string, name: string, email: string, password?: string) => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -42,6 +43,30 @@ export const useAuthStore = create<AuthState>((set) => ({
           localStorage.removeItem('auth_user');
         }
       }
+    }
+  },
+  updateProfile: async (token, name, email, password) => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    try {
+      const res = await fetch(`${API_URL}/api/user/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name, email, password: password || undefined }),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to update profile');
+      }
+      const data = await res.json();
+      const updatedUser = data.user;
+      localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+      set({ user: updatedUser });
+      return true;
+    } catch (err: any) {
+      throw err;
     }
   },
 }));

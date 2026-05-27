@@ -29,6 +29,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/user/profile', [AuthController::class, 'updateProfile']);
 
     // Family Tree Management
     Route::post('trees/import/json', [TreeController::class, 'importJson']);
