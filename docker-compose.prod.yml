@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - internal
+      - kinova_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -27,7 +27,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - internal
+      - kinova_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -41,6 +41,9 @@ services:
       dockerfile: Dockerfile.prod
     container_name: kinova_backend
     restart: unless-stopped
+    ports:
+      # Bind to 127.0.0.1 so port 8000 is only accessible locally via Host Nginx
+      - "127.0.0.1:8000:8000"
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
@@ -62,8 +65,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - internal
-      - proxy-net
+      - kinova_network
 
   # Laravel Queue Worker
   queue:
@@ -92,7 +94,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - internal
+      - kinova_network
 
   # Laravel Reverb WebSocket Server
   reverb:
@@ -102,6 +104,9 @@ services:
     container_name: kinova_reverb
     restart: unless-stopped
     command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    ports:
+      # Bind to 127.0.0.1 so port 8080 is only accessible locally via Host Nginx
+      - "127.0.0.1:8080:8080"
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
@@ -126,15 +131,12 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - internal
-      - proxy-net
+      - kinova_network
 
 volumes:
   postgres_data:
   redis_data:
 
 networks:
-  internal:
+  kinova_network:
     driver: bridge
-  proxy-net:
-    external: true
