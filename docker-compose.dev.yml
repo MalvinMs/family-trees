@@ -74,7 +74,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - QUEUE_CONNECTION=redis
-    command: ["php", "artisan", "queue:work", "--tries=3"]
+    command: [ "php", "artisan", "queue:work", "--tries=3" ]
 
   # Laravel Reverb Websocket Server
   reverb:
@@ -101,7 +101,7 @@ services:
       - DB_PASSWORD=kinova_password
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    command: [ "php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080" ]
 
 volumes:
   postgres_data:

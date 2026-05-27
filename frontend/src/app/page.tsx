@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTreeStore } from '../store/treeStore';
-import { Network, Calendar, Trash2 } from 'lucide-react';
+import { Network, Calendar, Trash2, Eye } from 'lucide-react';
 import Header from './components/dashboard/Header';
 import MetricsGrid from './components/dashboard/MetricsGrid';
 import DynasticMilestones from './components/dashboard/DynasticMilestones';
@@ -308,8 +308,8 @@ export default function DashboardPage() {
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-[#7b8e7f] dark:text-[#9cb2a2] bg-[#7b8e7f]/10 dark:bg-[#9cb2a2]/15 px-2.5 py-1 rounded-full">
-                          View Canvas
+                        <span className="p-2.5 rounded-full bg-[#7b8e7f]/10 dark:bg-[#9cb2a2]/15 text-[#7b8e7f] dark:text-[#9cb2a2] hover:bg-[#7b8e7f]/20 dark:hover:bg-[#9cb2a2]/25 transition-all" title="View canvas">
+                          <Eye size={16} />
                         </span>
                         <button
                           onClick={(e) => handleDeleteTreeClick(e, tree)}

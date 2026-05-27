@@ -15,7 +15,7 @@ import '@xyflow/react/dist/style.css';
 import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore } from '../../../store/treeStore';
 import type { Person, Relationship } from '../../../store/treeStore';
-import { ArrowLeft, UserPlus, Settings, Trash2, Sun, Moon, X, Clock, AlignLeft, MessageSquare, Send, History, Users, Download, Globe, Copy, Check, Menu, Sparkles } from 'lucide-react';
+import { ArrowLeft, UserPlus, Settings, Trash2, Sun, Moon, X, Clock, AlignLeft, MessageSquare, Send, History, Users, Download, Globe, Copy, Check, Menu, Sparkles, Pencil } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
 import DeleteTreeModal from '../../components/dashboard/DeleteTreeModal';
 import Echo from 'laravel-echo';
@@ -62,6 +62,9 @@ export default function TreeWorkspacePage() {
   const navigate = useNavigate();
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isEditingTreeName, setIsEditingTreeName] = useState(false);
+  const [treeNameInput, setTreeNameInput] = useState('');
+  const [savingTreeName, setSavingTreeName] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -635,6 +638,19 @@ export default function TreeWorkspacePage() {
     }
   };
 
+  const handleSaveTreeName = async () => {
+    if (!token || !activeTree || !treeNameInput.trim() || savingTreeName) return;
+    setSavingTreeName(true);
+    try {
+      await updateTree(token, activeTree.id, { name: treeNameInput.trim() });
+      setIsEditingTreeName(false);
+    } catch (err) {
+      console.error('Failed to rename family tree:', err);
+    } finally {
+      setSavingTreeName(false);
+    }
+  };
+
   const handleExport = async (format: 'json' | 'gedcom') => {
     if (!token || !id) return;
     try {
@@ -684,8 +700,59 @@ export default function TreeWorkspacePage() {
               >
                 <ArrowLeft size={18} />
               </button>
-              <div className="text-left">
-                <h1 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'} max-w-[150px] sm:max-w-none truncate`}>{activeTree?.name || 'Loading Canvas...'}</h1>
+              <div className="text-left group">
+                {isEditingTreeName ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={treeNameInput}
+                      onChange={(e) => setTreeNameInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveTreeName();
+                        if (e.key === 'Escape') setIsEditingTreeName(false);
+                      }}
+                      autoFocus
+                      className={`px-3 py-1.5 rounded-lg border text-sm font-bold focus:outline-none focus:ring-2 focus:ring-offset-1 w-64 ${
+                        isDarkMode
+                          ? 'bg-slate-950 border-white/15 text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2] focus:ring-offset-slate-900'
+                          : 'bg-[#faf9f6] border-slate-300 text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f] focus:ring-offset-white'
+                      }`}
+                    />
+                    <button
+                      onClick={handleSaveTreeName}
+                      disabled={savingTreeName}
+                      className="p-1 rounded bg-[#7b8e7f]/20 hover:bg-[#7b8e7f]/30 text-[#7b8e7f] dark:text-[#9cb2a2] transition-all cursor-pointer"
+                      title="Save name"
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button
+                      onClick={() => setIsEditingTreeName(false)}
+                      className="p-1 rounded bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 transition-all cursor-pointer"
+                      title="Cancel"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <h1 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'} max-w-[150px] sm:max-w-none truncate`}>
+                      {activeTree?.name || 'Loading Canvas...'}
+                    </h1>
+                    {activeTree?.owner_id === user?.id && (
+                      <button
+                        onClick={() => {
+                          setTreeNameInput(activeTree?.name || '');
+                          setIsEditingTreeName(true);
+                        }}
+                        className={`p-1 rounded-md opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-slate-500/10 text-slate-400 hover:text-[#7b8e7f] dark:hover:text-[#9cb2a2] transition-all cursor-pointer`}
+                        title="Rename label"
+                      >
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                  </div>
+                )}
                 <p className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Kinova Canvas Workspace</p>
               </div>
             </div>
@@ -849,8 +916,54 @@ export default function TreeWorkspacePage() {
             >
               <ArrowLeft size={16} />
             </button>
-            <div className="text-left max-w-[150px] truncate">
-              <h1 className="font-bold text-xs truncate">{activeTree?.name || 'Loading...'}</h1>
+            <div className="text-left max-w-[200px] truncate group">
+              {isEditingTreeName ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={treeNameInput}
+                    onChange={(e) => setTreeNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveTreeName();
+                      if (e.key === 'Escape') setIsEditingTreeName(false);
+                    }}
+                    autoFocus
+                    className={`px-2.5 py-1 rounded-md border text-xs font-bold focus:outline-none focus:ring-2 w-32 ${
+                      isDarkMode
+                        ? 'bg-slate-950 border-white/15 text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                        : 'bg-[#faf9f6] border-slate-300 text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                    }`}
+                  />
+                  <button
+                    onClick={handleSaveTreeName}
+                    disabled={savingTreeName}
+                    className="p-1 rounded bg-[#7b8e7f]/20 text-[#7b8e7f] dark:text-[#9cb2a2]"
+                  >
+                    <Check size={10} />
+                  </button>
+                  <button
+                    onClick={() => setIsEditingTreeName(false)}
+                    className="p-1 rounded bg-slate-500/10 text-slate-450"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <h1 className="font-bold text-xs truncate">{activeTree?.name || 'Loading...'}</h1>
+                  {activeTree?.owner_id === user?.id && (
+                    <button
+                      onClick={() => {
+                        setTreeNameInput(activeTree?.name || '');
+                        setIsEditingTreeName(true);
+                      }}
+                      className="p-0.5 rounded hover:bg-slate-500/10 text-slate-400"
+                    >
+                      <Pencil size={9} />
+                    </button>
+                  )}
+                </div>
+              )}
               <p className={`text-[8px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Kinova Canvas</p>
             </div>
           </div>
