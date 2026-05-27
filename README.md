@@ -1,89 +1,100 @@
-# Kinova — Real-Time Collaborative Genealogy Platform
+# Kinova - Premium Collaborative Genealogy Canvas 🌳
 
-Kinova is a premium, state-of-the-art genealogy platform that allows multiple users to collaborate in real-time on interactive, highly customizable family trees. Designed with a sleek, minimalist Apple- and Notion-inspired monochrome/sage green aesthetic, the project features a fully responsive diagram workspace canvas, instant WebSockets/SSE collaboration syncing, granular activity timelines, an archival research discussion feed, and a complete unauthenticated public portal.
+Kinova is a state-of-the-art, highly interactive, and collaborative family tree (Silsilah) canvas workspace. It enables families to trace their heritage, log historical milestones, and collaborate in real-time.
 
----
+```mermaid
+graph TD
+    %% Frontend Layer
+    CF[Cloudflare Pages - Next.js Static Web App] -->|HTTPS REST API| NG[Nginx Reverse Proxy on VPS]
+    CF -->|WSS Real-Time Canvas Events| NG
 
-## 🚀 Implemented Features
+    %% Reverse Proxy SSL Termination
+    NG -->|HTTP Port 8000| LV[Laravel 11 REST API Container]
+    NG -->|WS Port 8080| RV[Laravel Reverb WebSocket Server Container]
 
-The following features have been fully implemented and integrated across the frontend, backend, and database layers:
-
-### 🌳 Core Genealogy & Dynamic Graph Engine
-* **Interactive Diagram Canvas**: View, position, drag, and style family member nodes dynamically on a high-performance canvas powered by **React Flow**. Coordinates are debounced and persisted instantly to the database.
-* **Complex Graph Relationships**: Connect members through custom-labeled lineage lines (e.g., *Parent*, *Spouse*, *Sibling*, *Adopted*, *Guardian*, *Step Parent*) with beautiful edge visualizations.
-* **Dynamic Schema Engine**: Customize person profiles on-the-fly. Create dynamic custom fields (text, date, dropdowns, etc.) stored as unified JSONB payload blocks inside the database.
-* **Erase Lineage**: A premium, branded **Erase Tree** alert dialog styled with our signature **Sage Green** theme colorway to safely clear files and relational records.
-
-### 🔄 Import & Export Systems (Backup Archives)
-* **JSON Archives Export**: Download the entire family tree, including custom dynamic fields, coordinate positions, profiles, and relationships in a standardized JSON backup structure.
-* **JSON Archive Import**: Restore family tree archives. Features a robust **relational ID re-mapping engine** that automatically translates old node/relationship links to newly created database UUIDs to prevent conflicts.
-
-### 👥 Real-Time Collaboration & Syncing
-* **Broadcasting & Websockets**: Integrated with **Laravel Reverb (WebSockets)** and **Laravel Echo** for instant delta sync updates (member additions, relationship edits, comments) across all active collaborator canvases.
-* **Fallback SSE Engine**: A non-blocking Server-Sent Events (SSE) stream powered by Redis queue polling as a secondary synchronization protocol.
-* **Granular RBAC System**: Share family trees with collaborators as `Viewer` (read-only layout, disabled editing handles) or `Editor` (write access).
-
-### 📖 Archival Memoirs & Research Feed
-* **Notion-Inspired Drawer**: Click nodes to open a sliding memoir drawer showing dynamic vital stats, biographies, and a chronological dynastic timeline (Birth, marriage, departure, and currently living).
-* **Research Discussion Feed**: Collaborative comment threads attached to individual family nodes, allowing clans to co-author historical logs.
-* **Activity Audit Feed**: A filterable sliding history drawer logging detailed timeline entries of who added, edited, or deleted nodes and relationships within each tree.
-
-### 🌐 Public Archival Pages & Share Controls
-* **Unauthenticated Reader Workspace**: An unauthenticated, lightweight public view available at `/public/trees/[id]` for guests. Draggable features, connections, and edits are strictly disabled, while maintaining active theme settings, memoirs, timeline, and quick search.
-* **Share Modal Share Link Controller**: Fully integrated **"Make Tree Public" toggle switch** and **"Copy Link" utilities** directly into the owner's sharing menu. Generates shareable, read-only URLs copyable with a single click.
-
----
-
-## 🛠️ Architecture & Tech Stack
-
-The application is containerized using **Docker** and orchestrated via **Docker Compose**:
-
-* **Frontend**: Next.js (TypeScript) + React Flow + Zustand (State Management) + Tailwind CSS (Notion/Apple Warm-Archival Aesthetic)
-* **Backend**: Laravel 11 / PHP 8.4 API with Sanctum (Token Auth) & Laravel Reverb (WebSockets)
-* **Database**: PostgreSQL 16 (Full UUID schema structure)
-* **Caching & Queue**: Redis (Non-blocking SSE and job queue management)
-
----
-
-## ⚡ Quick Start (Docker Setup)
-
-You can launch the entire ecosystem in development mode with a single command.
-
-### 1. Prerequisite
-Make sure you have **Docker** and **Docker Compose** installed on your machine.
-
-### 2. Startup Containers
-Run the following script from the project root to pull down containers, build assets, and launch services:
-```bash
-./rebuild-stack.sh
-```
-*Or, on Windows PowerShell:*
-```powershell
-.\rebuild-stack.sh
+    %% Internal Stack Layer
+    LV -->|Read/Write SQL| PG[(PostgreSQL 16 Database Container)]
+    LV -->|Cache & Jobs dispatch| RD[(Redis Container)]
+    RV -->|Whisper events| RD
+    QW[Laravel Queue Listener Container] -->|Listen jobs| RD
+    QW -->|Process async actions| PG
 ```
 
-This spins up and automatically configures:
-* **Frontend Web App**: `http://localhost:3000`
-* **Laravel Backend API**: `http://localhost:8000`
-* **Laravel Reverb Server**: Port `8080`
-* **PostgreSQL Database**: Port `5432`
-* **Redis Cache & Queue**: Port `6379`
+---
 
-### 3. Database Migration & Seeding
-If you run `./rebuild-stack.sh`, migration and seeding are completed automatically. For manual database refreshes, run:
-```bash
-docker compose exec backend php artisan migrate:fresh --seed
-```
+## 🎨 Kinova Design Philosophy & Tech Stack
 
-#### Default Credentials:
-* **Admin Account**: `admin@kinova.com`
-* **Password**: `password`
+Kinova is crafted with a warm-monochrome and sage-green design system. It is optimized to feel extremely responsive, visually lightweight, and rich in micro-animations.
+
+* **Frontend Client Workspace**: Next.js 15, React 19, Zustand State Store, and **React Flow** (custom interactive lineage canvas engine).
+* **Backend API Framework**: Laravel 11 (REST API, SSE Event streaming).
+* **Real-time Synchronization Engine**: Laravel Reverb (high-performance WebSockets broadcast engine, client-to-client drag coordinate whispering).
+* **Database & Caching**: PostgreSQL 16 (strict relational tracking), Redis 7 (job queue broker, caching).
+* **Deployment Channels**: Cloudflare Pages (Frontend CDN Edge), Docker Compose on VPS (Containerized Backend Stack behind Nginx SSL).
 
 ---
 
-## 💡 Key Performance Optimizations
+## ⚡ Quickstart Guide
 
-* **Laravel Reverb Routing**: Backend-to-backend socket dispatches utilize Docker internal network DNS (`reverb:8080`), while the Next.js client establishes browser websocket bridges directly to `localhost:8080`.
-* **CORS & JSON Validation Security**: The Laravel API gracefully intercepts validation failures and missing tokens, returning correct `401 Unauthorized` JSON responses rather than redirecting, keeping the frontend client in sync.
-* **High-Concurrency SSE Workers**: Configured with `PHP_CLI_SERVER_WORKERS=10` inside the Laravel container environment. This allows `php artisan serve` to process the persistent, real-time SSE stream asynchronously, ensuring that everyday API requests load **instantly** (under 50ms) rather than queuing.
-* **Lightweight SSE Polling**: Replaced blocking `Redis::subscribe` loops in PHP with a non-blocking `Redis::lpop()` queue polling mechanism, preventing socket lockups while preserving real-time (sub-2-second) update propagation.
+To boot and test the full-stack system locally in under 3 minutes, follow our quickstart guides:
+
+* 💻 **Local Development**: [Local Setup Guide](file:///deploy/development.md)
+* 🔒 **Production VPS & Cloudflare**: [Production VPS & Cloudflare Pages Guide](file:///deploy/production.md)
+
+---
+
+## 🔌 Complete RESTful API Routes Sheet
+
+The backend service exposes a highly optimized, fully token-secured RESTful interface:
+
+### 1. Authentication Services
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/register` | Create a new user profile | No |
+| `POST` | `/api/login` | Authenticate credentials and receive Bearer Token | No |
+| `POST` | `/api/logout` | Revoke active Bearer token | Yes |
+| `GET` | `/api/user` | Fetch current profile metadata | Yes |
+
+### 2. Family Tree Archives
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/trees` | List all trees owned by or shared with the user | Yes |
+| `POST` | `/api/trees` | Create a new family silsilah tree canvas | Yes |
+| `GET` | `/api/trees/{id}` | Fetch deep relational details of a specific tree | Yes |
+| `PUT` | `/api/trees/{id}` | Update tree settings (e.g. toggle public view) | Yes |
+| `DELETE` | `/api/trees/{id}` | Permanently delete tree archive and all relationships | Yes |
+| `GET` | `/api/public/trees/{id}` | Fetch public read-only tree (no Auth required) | No |
+| `GET` | `/api/trees/{id}/export/{format}`| Download tree export backup (`gedcom` or `json`) | Yes |
+
+### 3. Family Members (Persons)
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/persons` | Create and place a new family node on the canvas | Yes |
+| `PUT` | `/api/persons/{id}` | Update biographical fields or UI coordinate positions | Yes |
+| `DELETE` | `/api/persons/{id}` | Remove a family member and cascade break relationships | Yes |
+| `GET` | `/api/persons/{id}` | Retrieve comprehensive individual milestone logs | Yes |
+
+### 4. Lineage Connections (Relationships)
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/relationships` | Link two family nodes (spouse, parent, sibling, adopted) | Yes |
+| `DELETE` | `/api/relationships/{id}`| Break connection and destroy edge permanent link | Yes |
+
+### 5. Research Discussion (Comments)
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/persons/{personId}/comments`| Fetch research notes/comments for a family member | Yes |
+| `POST` | `/api/comments` | Post a new research note or archival finding | Yes |
+| `DELETE` | `/api/comments/{id}` | Remove research note | Yes |
+
+### 6. Collaborator Permissions
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/trees/{id}/collaborators`| Fetch owners and active users with permission rights | Yes |
+| `POST` | `/api/trees/{id}/share` | Invite user (by email) as `editor` or `viewer` | Yes |
+| `DELETE` | `/api/collaborators/{id}`| Revoke access and expel collaborator from canvas | Yes |
+
+### 7. Audit Trails & Activity logs
+| Method | URI Route | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/trees/{id}/activities`| Stream chronological history logs of modifications | Yes |
