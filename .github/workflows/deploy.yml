@@ -1,0 +1,40 @@
+name: Kinova Backend Production CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'docker-compose.prod.yml'
+      - 'deploy.sh'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy:
+    name: Deploy Backend to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true # Stop execution on first error
+          script: |
+            echo ">>> Starting Automated CI/CD CD Process on VPS..."
+            cd /var/www/family-trees
+            
+            # Fetch latest changes
+            git fetch origin main
+            git reset --hard origin/main
+            
+            # Make sure deploy script is executable and trigger it
+            chmod +x deploy.sh
+            ./deploy.sh

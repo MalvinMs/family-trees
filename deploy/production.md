@@ -46,11 +46,25 @@ ssh ubuntu@YOUR_VPS_IP
 
 ---
 
-### Step 2: System Update and Package Installation
+### Step 2: System Update, Package Installation, and Firewall Setup
 Update the VPS package manager and install essential packages (Git, regular Nginx, Certbot, and Python SSL integration):
 ```bash
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y git nginx certbot python3-certbot-nginx curl ca-certificates
+```
+
+Configure the Uncomplicated Firewall (UFW) to only permit traffic on ports `22` (SSH), `80` (HTTP), and `443` (HTTPS):
+```bash
+# Allow essential incoming ports
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Enable the firewall (press 'y' to confirm when prompted)
+sudo ufw enable
+
+# Verify firewall status
+sudo ufw status
 ```
 
 ---
