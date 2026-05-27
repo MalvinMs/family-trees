@@ -40,11 +40,21 @@ function PersonNode({ id, selected, data }: PersonNodeProps) {
           : 'bg-white text-[#1c1c1e] hover:border-slate-300'
       } ${selected ? 'ring-2 ring-[#7b8e7f] dark:ring-[#9cb2a2] border-transparent' : ''}`}
     >
-      {/* React Flow handles for drawing connections */}
+      {/* Top handles */}
       <Handle type="target" position={Position.Top} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none" id="parent-in" />
+      <Handle type="source" position={Position.Top} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none opacity-0" id="parent-in-src" />
+
+      {/* Bottom handles */}
       <Handle type="source" position={Position.Bottom} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none" id="child-out" />
+      <Handle type="target" position={Position.Bottom} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none opacity-0" id="child-out-tgt" />
+
+      {/* Left handles */}
       <Handle type="source" position={Position.Left} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none" id="partner-left" />
+      <Handle type="target" position={Position.Left} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none opacity-0" id="partner-left-tgt" />
+
+      {/* Right handles */}
       <Handle type="target" position={Position.Right} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none" id="partner-right" />
+      <Handle type="source" position={Position.Right} className="!bg-[#7b8e7f] !w-2.5 !h-2.5 !border-none opacity-0" id="partner-right-src" />
 
       {/* Node Header */}
       <div className="flex items-start justify-between mb-3 text-left">
