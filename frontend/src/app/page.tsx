@@ -549,6 +549,10 @@ export default function DashboardPage() {
                 {deleting ? 'Deleting Archive...' : 'Delete Permanently'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
       {/* User Profile Modal */}
       {showProfileModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
