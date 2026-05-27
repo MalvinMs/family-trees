@@ -58,12 +58,19 @@ REVERB_APP_SECRET=kinovaprodsecret
 REVERB_HOST=reverb
 REVERB_PORT=8080
 REVERB_SCHEME=https
+
+CORS_ALLOWED_ORIGINS=https://family.yourdomain.com
 ```
 
 > [!IMPORTANT]
 > Change the `APP_KEY`, `DB_PASSWORD`, and Reverb details with custom, randomly-generated high-security credentials before launching.
 
-### 4. Spin Up the Backend Services
+### 4. Configure CORS Security Best Practices
+To ensure secure cross-origin requests from your Cloudflare Pages frontend to the Laravel API backend, configure the allowed origins explicitly:
+* **Production**: Set `CORS_ALLOWED_ORIGINS=https://family.yourdomain.com` in your backend `.env` matching your custom frontend domain.
+* **Security Rules**: Do not use `*` (wildcard `Access-Control-Allow-Origin`) in production when `supports_credentials => true` is active, as modern browsers strictly block session cookies and authorization headers on wildcard origins.
+
+### 5. Spin Up the Backend Services
 Launch the production containers using the `prod` compose orchestrator profile:
 ```bash
 # Allow script execution
@@ -77,7 +84,7 @@ This boots:
 * `kinova_queue` (Laravel background async queue listener)
 * `kinova_reverb` (Laravel WebSocket server)
 
-### 5. Build Database Tables & Optimize Cache
+### 6. Build Database Tables & Optimize Cache
 Run production migrations and optimize the Laravel framework configuration files inside the container:
 ```bash
 # Migrate database tables
@@ -87,7 +94,7 @@ docker compose -f docker-compose.prod.yml exec backend php artisan migrate --for
 docker compose -f docker-compose.prod.yml exec backend php artisan optimize
 ```
 
-### 6. Configure Nginx Reverse Proxy
+### 7. Configure Nginx Reverse Proxy
 Create a new Virtual Host configuration file:
 ```bash
 sudo nano /etc/nginx/sites-available/kinova-api
@@ -130,7 +137,7 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-### 7. Secure SSL Certificates with Let's Encrypt
+### 8. Secure SSL Certificates with Let's Encrypt
 Automatically procure and install Let's Encrypt SSL certificates:
 ```bash
 sudo certbot --nginx -d api.yourdomain.com
