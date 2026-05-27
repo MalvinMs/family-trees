@@ -1,108 +1,67 @@
 services:
-  # Database Service
-  postgres:
+  # Database Service (PostgreSQL)
+  db:
     image: postgres:15-alpine
-    container_name: kinova_postgres_prod
-    restart: always
+    container_name: kinova-db-prod
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_DATABASE:-kinova}
       POSTGRES_USER: ${DB_USERNAME:-kinova_user}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-kinova_password}
-    ports:
-      - "127.0.0.1:5432:5432" # Bind to localhost on production VPS for security
     volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - internal
 
-  # Cache Service
-  redis:
-    image: redis:alpine
-    container_name: kinova_redis_prod
-    restart: always
-    ports:
-      - "127.0.0.1:6379:6379" # Bind to localhost on production VPS for security
+  # Cache & Queue Driver Service (Redis)
+  cache:
+    image: redis:7-alpine
+    container_name: kinova-cache-prod
+    restart: unless-stopped
     volumes:
-      - redis_data_prod:/data
+      - redis-data:/data
+    networks:
+      - internal
 
-  # Laravel API Service
-  backend:
+  # Unified Laravel Application Service (PHP-FPM, Nginx, Supervisord, Reverb, Queue Worker)
+  app:
+    container_name: kinova-backend-prod
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    container_name: kinova_backend_prod
-    restart: always
-    volumes:
-      - ./backend:/var/www
-    ports:
-      - "127.0.0.1:8000:8000" # Expose internally for Nginx reverse proxy
-    depends_on:
-      - postgres
-      - redis
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
     environment:
-      - APP_ENV=production
-      - APP_DEBUG=false
-      - DB_CONNECTION=pgsql
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_DATABASE=${DB_DATABASE:-kinova}
-      - DB_USERNAME=${DB_USERNAME:-kinova_user}
-      - DB_PASSWORD=${DB_PASSWORD:-kinova_password}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - PHP_CLI_SERVER_WORKERS=10
-
-  # Laravel Queue Worker
-  queue:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: kinova_queue_prod
-    restart: always
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: ${DB_DATABASE:-kinova}
+      DB_USERNAME: ${DB_USERNAME:-kinova_user}
+      DB_PASSWORD: ${DB_PASSWORD:-kinova_password}
+      REDIS_HOST: cache
+      REVERB_APP_ID: ${REVERB_APP_ID:-kinova_app_id}
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-kinova_app_key}
+      REVERB_APP_SECRET: ${REVERB_APP_SECRET:-kinova_app_secret}
+      REVERB_HOST: ${REVERB_HOST:-api.yourdomain.com}
+      REVERB_PORT: 443
+      REVERB_SCHEME: https
     volumes:
-      - ./backend:/var/www
+      - app-storage:/var/www/html/storage
     depends_on:
-      - postgres
-      - redis
-    environment:
-      - APP_ENV=production
-      - APP_DEBUG=false
-      - DB_CONNECTION=pgsql
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_DATABASE=${DB_DATABASE:-kinova}
-      - DB_USERNAME=${DB_USERNAME:-kinova_user}
-      - DB_PASSWORD=${DB_PASSWORD:-kinova_password}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - QUEUE_CONNECTION=redis
-    command: ["php", "artisan", "queue:work", "--tries=3"]
-
-  # Laravel Reverb Websocket Server
-  reverb:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: kinova_reverb_prod
-    restart: always
-    volumes:
-      - ./backend:/var/www
-    ports:
-      - "127.0.0.1:8080:8080" # Expose internally for Nginx reverse proxy
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      - APP_ENV=production
-      - APP_DEBUG=false
-      - DB_CONNECTION=pgsql
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_DATABASE=${DB_DATABASE:-kinova}
-      - DB_USERNAME=${DB_USERNAME:-kinova_user}
-      - DB_PASSWORD=${DB_PASSWORD:-kinova_password}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+      - db
+      - cache
+    networks:
+      - internal
+      - proxy-net   # Connects Laravel to your Nginx Proxy Manager network
 
 volumes:
-  postgres_data_prod:
-  redis_data_prod:
+  app-storage:
+  db-data:
+  redis-data:
+
+networks:
+  internal:
+    driver: bridge
+  proxy-net:
+    external: true   # Custom network managed by your Nginx Proxy Manager
