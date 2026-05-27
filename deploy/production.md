@@ -271,14 +271,13 @@ Deploying the Next.js static application on Cloudflare Pages guarantees low late
    };
    export default nextConfig;
    ```
-2. **Configure SPA Redirect Fallbacks**:
-   Because dynamic URLs (like `/trees/[id]`) are resolved client-side in a static Next.js export, you must instruct Cloudflare Pages to redirect all unregistered routes to `index.html` with a `200` rewrite.
+2. **Configure SPA Redirect Fallbacks (404.html Trick)**:
+   Because dynamic URLs (like `/trees/[id]`) are resolved client-side in a static Next.js export, you must configure the build step to duplicate `index.html` as `404.html`. Cloudflare Pages will automatically serve `404.html` (your app shell) for any dynamic route requests, enabling seamless client-side bootstrap and dynamic routing.
    
-   Create a file named `frontend/public/_redirects`:
-   ```text
-   /* /index.html 200
+   Ensure that in `frontend/package.json`, your `build` script is configured as:
+   ```json
+   "build": "next build && cp out/index.html out/404.html"
    ```
-   Next.js will copy this file into the `out` directory automatically during the build process, enabling seamless client-side routing on Cloudflare Pages.
 
 3. Log into the **Cloudflare Dashboard** -> **Workers & Pages** -> **Create Application** -> **Pages** -> **Connect to Git**.
 3. Select your repository, and set the **Build Settings**:
