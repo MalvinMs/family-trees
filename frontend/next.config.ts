@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
-  images: {
-    unoptimized: true, // Required for static exports
-  },
+  // Configured for dynamic SSR / Edge deployment on Cloudflare Pages
 };
 
 export default nextConfig;

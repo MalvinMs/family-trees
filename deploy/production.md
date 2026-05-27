@@ -256,35 +256,37 @@ sudo systemctl status certbot.timer
 
 ---
 
-## ⚡ Part 2: Cloudflare Pages Frontend Deployment
+## ⚡ Part 2: Cloudflare Pages Frontend Deployment (Native Edge Integration)
 
-Deploying the Next.js static application on Cloudflare Pages guarantees low latency and global edge acceleration.
+By utilizing Cloudflare’s Edge runtime, Next.js runs natively inside Cloudflare Workers, supporting dynamic routes (like `/trees/[id]`), clean URLs, and Server-Side Rendering (SSR) with zero redirection configurations or 404 hacks.
 
-1. Ensure `/frontend/next.config.js` or `next.config.mjs` is configured to render static static-site builds (`output: 'export'`) with unoptimized images:
-   ```javascript
-   /** @type {import('next').NextConfig} */
-   const nextConfig = {
-     output: 'export',
-     images: {
-       unoptimized: true,
-     },
-   };
-   export default nextConfig;
-   ```
-2. **Configure SPA Redirect Fallbacks (404.html Trick)**:
-   Because dynamic URLs (like `/trees/[id]`) are resolved client-side in a static Next.js export, you must configure the build step to duplicate `index.html` as `404.html`. Cloudflare Pages will automatically serve `404.html` (your app shell) for any dynamic route requests, enabling seamless client-side bootstrap and dynamic routing.
-   
-   Ensure that in `frontend/package.json`, your `build` script is configured as:
-   ```json
-   "build": "next build && cp out/index.html out/404.html"
-   ```
+### 1. Ensure Dynamic Routing is Active
+Verify that `/frontend/next.config.ts` (or `next.config.js`) does **not** contain `output: 'export'`. Next.js should run in dynamic mode:
+```typescript
+import type { NextConfig } from "next";
 
-3. Log into the **Cloudflare Dashboard** -> **Workers & Pages** -> **Create Application** -> **Pages** -> **Connect to Git**.
-3. Select your repository, and set the **Build Settings**:
-   - **Framework Preset**: `Next.js (Static HTML Export)`
-   - **Build Command**: `npm run build`
-   - **Build Output Directory**: `out`
+const nextConfig: NextConfig = {
+  // Configured for dynamic SSR / Edge deployment on Cloudflare Pages
+};
+
+export default nextConfig;
+```
+
+### 2. Connect Git Repo and Configure Build Settings
+1. Log into your **Cloudflare Dashboard**.
+2. Go to **Workers & Pages** -> **Create Application** -> **Pages** -> **Connect to Git**.
+3. Select your repository containing the genealogy tree codebase.
+4. Set the **Build Settings** in the connection wizard:
+   - **Framework Preset**: `None`
+   - **Build Command**: `npx @cloudflare/next-on-pages`
+   - **Build Output Directory**: `.vercel/output`
    - **Root Directory**: `frontend`
-4. Add the **Environment Variable**:
-   - `NEXT_PUBLIC_API_URL` = `https://api.alezonyth.my.id`
-5. Click **Save and Deploy**. Once compiled, you can easily bind a custom domain in the **Custom Domains** tab.
+
+*Note: The `npx @cloudflare/next-on-pages` build command automatically compiles your Next.js application and packages it directly inside `.vercel/output` to run on the global Cloudflare Edge network.*
+
+### 3. Inject Production Environmental Variables
+Navigate to your Cloudflare Pages project **Settings** -> **Environment Variables** and add:
+- `NEXT_PUBLIC_API_URL` = `https://api.alezonyth.my.id`
+
+### 4. Deploy
+Click **Save and Deploy**. Cloudflare compiles your Next.js application and hosts it natively. You can easily bind your custom domain (e.g. `family-tree.malvin.web.id`) in the **Custom Domains** tab. All dynamic paths and clean URLs will now resolve natively!
