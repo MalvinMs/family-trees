@@ -17,8 +17,9 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore, Person, Relationship } from '../../../store/treeStore';
-import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download, Globe, Copy, Check } from 'lucide-react';
+import { ArrowLeft, UserPlus, Settings, Plus, Trash2, HelpCircle, Sun, Moon, X, Clock, MapPin, AlignLeft, BookOpen, MessageSquare, Send, History, Share2, Users, Download, Globe, Copy, Check, Menu, MoreHorizontal } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
+import DeleteTreeModal from '../../components/dashboard/DeleteTreeModal';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
@@ -53,18 +54,22 @@ export default function TreeWorkspacePage() {
     addRelationshipLocal,
     deleteRelationshipLocal,
     updateTree,
+    deleteTree,
     loading,
   } = useTreeStore();
 
   const router = useRouter();
 
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // State for Canvas Nodes & Edges
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Modals & Panels State
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showPersonModal, setShowPersonModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
   const [showRelationModal, setShowRelationModal] = useState(false);
@@ -511,6 +516,20 @@ export default function TreeWorkspacePage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const handleConfirmDeleteTree = async () => {
+    if (!activeTree || !token || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteTree(token, activeTree.id);
+      router.push('/');
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete family tree archive');
+    } finally {
+      setDeleting(false);
+      setShowDeleteModal(false);
+    }
+  };
+
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !selectedPerson || !commentContent.trim() || submittingComment) return;
@@ -552,6 +571,8 @@ export default function TreeWorkspacePage() {
     }
   };
 
+  const selectedEdge = edges.find((e) => e.selected);
+
   if (loading && !activeTree) {
     return (
       <div className={`flex min-h-screen items-center justify-center transition-colors duration-300 ${isDarkMode ? 'dark bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'}`}>
@@ -563,137 +584,318 @@ export default function TreeWorkspacePage() {
   return (
     <main className={`flex h-screen w-screen overflow-hidden relative transition-colors duration-300 ${isDarkMode ? 'bg-[#121213] text-[#f3f3f5]' : 'bg-[#faf9f6] text-[#1c1c1e]'}`}>
       {/* Top Navbar */}
-      <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between pointer-events-none">
-        <div className={`flex items-center gap-3 pointer-events-auto backdrop-blur border px-4 py-2.5 rounded-xl shadow-xl ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200'}`}>
-          <button
-            onClick={() => router.push('/')}
-            className={`p-2 rounded-lg transition-all ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
-          >
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{activeTree?.name || 'Loading Canvas...'}</h1>
-            <p className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Kinova Canvas Workspace</p>
+      <div className="absolute top-4 left-4 right-4 z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3 pointer-events-none">
+        
+        {/* Desktop Navbar View (Only visible on md screens and larger) */}
+        <div className="hidden md:flex items-center justify-between w-full pointer-events-none">
+          <div className={`flex items-center justify-between w-full md:w-auto gap-3 pointer-events-auto backdrop-blur border px-4 py-2.5 rounded-xl shadow-xl ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200'}`}>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push('/')}
+                className={`p-2 rounded-lg transition-all ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+              >
+                <ArrowLeft size={18} />
+              </button>
+              <div className="text-left">
+                <h1 className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'} max-w-[150px] sm:max-w-none truncate`}>{activeTree?.name || 'Loading Canvas...'}</h1>
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Kinova Canvas Workspace</p>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={() => {
-              setEditingPerson(null);
-              setFirstName('');
-              setLastName('');
-              setGender('male');
-              setBirthDate('');
-              setDeathDate('');
-              setBiography('');
-              setDynamicData({});
-              setShowPersonModal(true);
-            }}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-md hover:scale-[1.01] transition-all pointer-events-auto ${
-              isDarkMode
-                ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
-                : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
-            }`}
-          >
-            <UserPlus size={16} />
-            Add Family Member
-          </button>
-
-          <button
-            onClick={toggleTheme}
-            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
-              isDarkMode
-                ? 'bg-slate-900/90 border-white/10 text-amber-400 hover:bg-slate-800'
-                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
-            title="Toggle Light/Dark Mode"
-          >
-            {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-          
-          <button
-            onClick={() => setShowFieldModal(true)}
-            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
-              isDarkMode
-                ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
-                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
-            title="Configure Custom Fields Schema"
-          >
-            <Settings size={18} />
-          </button>
-
-          <button
-            onClick={() => setShowShareModal(true)}
-            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
-              isDarkMode
-                ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
-                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
-            title="Share tree access"
-          >
-            <Users size={18} />
-          </button>
-
-          <button
-            onClick={() => {
-              setShowHistoryDrawer(true);
-              setShowShareModal(false);
-              setSelectedPerson(null);
-            }}
-            className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
-              isDarkMode
-                ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
-                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
-            }`}
-            title="View modification audit logs"
-          >
-            <History size={18} />
-          </button>
-
-          {/* Export Dropdown */}
-          <div className="relative pointer-events-auto">
+          <div className="flex items-center gap-2 pointer-events-auto justify-end flex-wrap">
             <button
-              onClick={() => setShowExportMenu((prev) => !prev)}
-              className={`flex items-center justify-center p-3 rounded-xl border shadow-xl transition-all ${
+              onClick={() => {
+                setEditingPerson(null);
+                setFirstName('');
+                setLastName('');
+                setGender('male');
+                setBirthDate('');
+                setDeathDate('');
+                setBiography('');
+                setDynamicData({});
+                setShowPersonModal(true);
+              }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm shadow-md hover:scale-[1.01] transition-all pointer-events-auto ${
+                isDarkMode
+                  ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                  : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+              }`}
+            >
+              <UserPlus size={16} />
+              <span>Add Family Member</span>
+            </button>
+
+            <button
+              onClick={toggleTheme}
+              className={`flex items-center justify-center p-2.5 rounded-xl border shadow-xl transition-all ${
+                isDarkMode
+                  ? 'bg-slate-900/90 border-white/10 text-amber-400 hover:bg-slate-800'
+                  : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+              title="Toggle Light/Dark Mode"
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            
+            <button
+              onClick={() => setShowFieldModal(true)}
+              className={`flex items-center justify-center p-2.5 rounded-xl border shadow-xl transition-all ${
                 isDarkMode
                   ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
                   : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
               }`}
-              title="Export family archives"
+              title="Configure Custom Fields Schema"
             >
-              <Download size={18} />
+              <Settings size={18} />
             </button>
-            {showExportMenu && (
-              <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-2xl border overflow-hidden z-50 transition-all ${
-                isDarkMode ? 'bg-[#18181a] border-white/5 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
-              }`}>
-                <button
-                  onClick={() => {
-                    handleExport('gedcom');
-                    setShowExportMenu(false);
-                  }}
-                  className={`w-full text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
-                    isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
-                  }`}
-                >
-                  Export GEDCOM (.ged)
-                </button>
-                <button
-                  onClick={() => {
-                    handleExport('json');
-                    setShowExportMenu(false);
-                  }}
-                  className={`w-full text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
-                    isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
-                  }`}
-                >
-                  Export JSON Backup (.json)
-                </button>
-              </div>
+
+            <button
+              onClick={() => setShowShareModal(true)}
+              className={`flex items-center justify-center p-2.5 rounded-xl border shadow-xl transition-all ${
+                isDarkMode
+                  ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                  : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+              title="Share tree access"
+            >
+              <Users size={18} />
+            </button>
+
+            <button
+              onClick={() => {
+                setShowHistoryDrawer(true);
+                setShowShareModal(false);
+                setSelectedPerson(null);
+              }}
+              className={`flex items-center justify-center p-2.5 rounded-xl border shadow-xl transition-all ${
+                isDarkMode
+                  ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                  : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+              title="View modification audit logs"
+            >
+              <History size={18} />
+            </button>
+
+            {/* Export Dropdown */}
+            <div className="relative pointer-events-auto">
+              <button
+                onClick={() => setShowExportMenu((prev) => !prev)}
+                className={`flex items-center justify-center p-2.5 rounded-xl border shadow-xl transition-all ${
+                  isDarkMode
+                    ? 'bg-slate-900/90 border-white/10 text-slate-300 hover:text-white hover:bg-slate-800'
+                    : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+                title="Export family archives"
+              >
+                <Download size={18} />
+              </button>
+              {showExportMenu && (
+                <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-2xl border overflow-hidden z-50 transition-all ${
+                  isDarkMode ? 'bg-[#18181a] border-white/5 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
+                }`}>
+                  <button
+                    onClick={() => {
+                      handleExport('gedcom');
+                      setShowExportMenu(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                      isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    Export GEDCOM (.ged)
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleExport('json');
+                      setShowExportMenu(false);
+                    }}
+                    className={`w-full text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                      isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    Export JSON Backup (.json)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Delete Tree Button */}
+            {activeTree?.owner_id === user?.id && (
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className={`flex items-center justify-center p-2.5 rounded-xl border shadow-xl transition-all ${
+                  isDarkMode
+                    ? 'bg-rose-950/20 border-rose-500/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300'
+                    : 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100 hover:text-rose-700'
+                }`}
+                title="Delete lineage archive"
+              >
+                <Trash2 size={18} />
+              </button>
             )}
           </div>
+        </div>
+
+        {/* Mobile Navbar View (Only visible on screens smaller than md) */}
+        <div className={`flex md:hidden items-center justify-between w-full gap-3 pointer-events-auto backdrop-blur border px-3.5 py-2.5 rounded-xl shadow-xl relative z-50 ${isDarkMode ? 'bg-slate-900/90 border-white/10 text-white' : 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-200'}`}>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push('/')}
+              className={`p-2 rounded-lg transition-all ${isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div className="text-left max-w-[150px] truncate">
+              <h1 className="font-bold text-xs truncate">{activeTree?.name || 'Loading...'}</h1>
+              <p className={`text-[8px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Kinova Canvas</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Quick Add Person Icon */}
+            <button
+              onClick={() => {
+                setEditingPerson(null);
+                setFirstName('');
+                setLastName('');
+                setGender('male');
+                setBirthDate('');
+                setDeathDate('');
+                setBiography('');
+                setDynamicData({});
+                setShowPersonModal(true);
+              }}
+              className={`p-2 rounded-lg transition-all ${
+                isDarkMode ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-100 text-slate-800 hover:bg-slate-250'
+              }`}
+              title="Add Family Member"
+            >
+              <UserPlus size={15} />
+            </button>
+
+            {/* Menu Toggle */}
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className={`p-2 rounded-lg transition-all ${
+                showMobileMenu
+                  ? (isDarkMode ? 'bg-white/15 text-white' : 'bg-slate-250 text-slate-950')
+                  : (isDarkMode ? 'bg-white/5 text-slate-300 hover:bg-white/10' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')
+              }`}
+            >
+              <Menu size={15} />
+            </button>
+          </div>
+
+          {/* Mobile Dropdown Panel */}
+          {showMobileMenu && (
+            <div className={`absolute top-full right-0 mt-2 w-56 rounded-xl border p-2.5 shadow-2xl z-50 flex flex-col gap-1 transition-all ${
+              isDarkMode ? 'bg-[#18181a]/95 border-white/5 text-slate-300' : 'bg-white/98 border-slate-200 text-slate-700'
+            }`}>
+              <button
+                onClick={() => {
+                  toggleTheme();
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                {isDarkMode ? <Sun size={14} className="text-amber-400" /> : <Moon size={14} className="text-slate-700" />}
+                Theme: {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowFieldModal(true);
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                <Settings size={14} />
+                Custom Fields
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowShareModal(true);
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                <Users size={14} />
+                Share Tree
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowHistoryDrawer(true);
+                  setShowShareModal(false);
+                  setSelectedPerson(null);
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                <History size={14} />
+                Activity Logs
+              </button>
+
+              <div className={`border-t my-1 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`} />
+
+              <button
+                onClick={() => {
+                  handleExport('gedcom');
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                <Download size={14} />
+                Export GEDCOM (.ged)
+              </button>
+
+              <button
+                onClick={() => {
+                  handleExport('json');
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'hover:bg-white/5 hover:text-white' : 'hover:bg-slate-100 hover:text-slate-950'
+                }`}
+              >
+                <Download size={14} />
+                Export JSON Backup (.json)
+              </button>
+
+              {activeTree?.owner_id === user?.id && (
+                <>
+                  <div className={`border-t my-1 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`} />
+                  <button
+                    onClick={() => {
+                      setShowDeleteModal(true);
+                      setShowMobileMenu(false);
+                    }}
+                    className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-all ${
+                      isDarkMode
+                        ? 'bg-rose-950/20 border border-rose-500/20 text-rose-450 hover:bg-rose-500/20 hover:text-rose-350'
+                        : 'bg-rose-50 border border-rose-200 text-rose-650 hover:bg-rose-100 hover:text-rose-700'
+                    }`}
+                  >
+                    <Trash2 size={14} />
+                    Delete Tree Archive
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1121,6 +1323,82 @@ export default function TreeWorkspacePage() {
               </div>
             )}
 
+            {/* Lineage Connections & Relationships (Touch-friendly Deletion!) */}
+            <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-white/5">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Users size={12} />
+                Lineage Connections
+              </h4>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                {(() => {
+                  const personRelations = activeTree?.relationships.filter(
+                    (r) => r.person_a === selectedPerson.id || r.person_b === selectedPerson.id
+                  ) || [];
+
+                  if (personRelations.length === 0) {
+                    return (
+                      <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-white/5 text-center text-slate-400 font-light text-[10px]">
+                        No lineage connections registered. Use the canvas handles to draw relations.
+                      </div>
+                    );
+                  }
+
+                  return personRelations.map((rel) => {
+                    const otherId = rel.person_a === selectedPerson.id ? rel.person_b : rel.person_a;
+                    const otherPerson = activeTree?.persons.find((p) => p.id === otherId);
+                    if (!otherPerson) return null;
+
+                    const relTypeLabels: Record<string, string> = {
+                      spouse: 'Spouse',
+                      parent: rel.person_a === selectedPerson.id ? 'Child' : 'Parent',
+                      sibling: 'Sibling',
+                      adopted: rel.person_a === selectedPerson.id ? 'Adopted Child' : 'Adopted Parent',
+                    };
+
+                    const relationLabel = relTypeLabels[rel.relation_type] || 'Relative';
+
+                    return (
+                      <div
+                        key={rel.id}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                          isDarkMode
+                            ? 'bg-[#1e1e20] border-[#2c2c2e] text-slate-300 hover:bg-[#252528]'
+                            : 'bg-[#fafaf9] border-[#e6e5e0] text-slate-700 hover:bg-[#f3f3f2]'
+                        }`}
+                      >
+                        <div className="flex flex-col text-left">
+                          <span className={`text-[8px] font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-500' : 'text-slate-450'}`}>
+                            {relationLabel}
+                          </span>
+                          <span className={`text-xs font-semibold ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                            {otherPerson.first_name} {otherPerson.last_name || ''}
+                          </span>
+                        </div>
+                        {token && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm(`Are you sure you want to break the connection with ${otherPerson.first_name} permanently?`)) {
+                                try {
+                                  await deleteRelationship(token, rel.id);
+                                } catch (err: any) {
+                                  alert(err.message || 'Failed to break connection');
+                                }
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 transition-all cursor-pointer"
+                            title="Break connection permanently"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
             {/* Archival Milestone Timeline */}
             <div className="space-y-4 pt-4 border-t border-slate-200/50 dark:border-white/5">
               <h4 className="text-[10px] uppercase font-bold tracking-widest text-slate-400 flex items-center gap-1.5">
@@ -1245,13 +1523,33 @@ export default function TreeWorkspacePage() {
             </div>
           </div>
 
-          {/* Quick Edit button */}
-          <button
-            onClick={() => handleEditPersonClick(selectedPerson)}
-            className="w-full mt-6 py-2.5 px-4 rounded-lg bg-[#1c1c1e] dark:bg-[#f3f3f5] text-white dark:text-[#1c1c1e] hover:bg-slate-800 dark:hover:bg-white font-medium text-xs shadow-sm transition-all"
-          >
-            Edit Historical Record
-          </button>
+          {/* Action buttons in Drawer */}
+          <div className="flex items-center gap-2 mt-6">
+            <button
+              onClick={() => handleEditPersonClick(selectedPerson)}
+              className="flex-1 py-2.5 px-4 rounded-lg bg-[#1c1c1e] dark:bg-[#f3f3f5] text-white dark:text-[#1c1c1e] hover:bg-slate-800 dark:hover:bg-white font-semibold text-xs shadow-sm transition-all text-center"
+            >
+              Edit Record
+            </button>
+            {token && (
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to remove this family member and all their relationships?')) {
+                    deletePerson(token, selectedPerson.id);
+                    setSelectedPerson(null);
+                  }
+                }}
+                className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-rose-950/20 border-rose-500/20 text-rose-455 hover:bg-rose-500/20 hover:text-rose-350'
+                    : 'bg-rose-50 border-rose-200 text-rose-650 hover:bg-rose-100 hover:text-rose-700'
+                }`}
+                title="Delete Family Member"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
         </aside>
       )}
 
@@ -1542,7 +1840,31 @@ export default function TreeWorkspacePage() {
             )}
           </div>
         </aside>
+      {/* Mobile Relationship Deletion Control Panel */}
+      {selectedEdge && (
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20 shadow-2xl border px-4 py-2.5 rounded-full flex items-center gap-3 backdrop-blur bg-white/95 dark:bg-slate-900/90 border-slate-200 dark:border-white/10 text-xs font-medium animate-bounce pointer-events-auto">
+          <span className="text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[9px] font-bold">Lineage Union Selected</span>
+          <button
+            onClick={() => {
+              if (confirm('Erase this family relationship connection permanently?')) {
+                deleteRelationship(token!, selectedEdge.id);
+              }
+            }}
+            className="px-3.5 py-1.5 bg-red-500 hover:bg-red-650 text-white rounded-full font-bold text-[10px] shadow-md flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02]"
+          >
+            <Trash2 size={12} /> Break Connection
+          </button>
+        </div>
       )}
+
+      {/* Delete Tree Alert Dialog Modal */}
+      <DeleteTreeModal
+        show={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        treeToDelete={activeTree}
+        onConfirm={handleConfirmDeleteTree}
+        deleting={deleting}
+      />
     </main>
   );
 }
