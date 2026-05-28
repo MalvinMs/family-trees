@@ -98,7 +98,7 @@ function PersonNode({ id: _id, selected, data }: PersonNodeProps) {
       )}
 
       {/* Action menu */}
-      <div className={`flex items-center justify-end gap-2 border-t pt-3 mt-4 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity duration-350 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
+      <div className={`flex items-center justify-end gap-2 border-t pt-3 mt-4 text-[10px] opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-350 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
         <button
           onClick={(e) => {
             e.stopPropagation();

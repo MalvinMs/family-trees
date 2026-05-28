@@ -44,12 +44,39 @@ const runHierarchicalLayout = (
     dagreGraph.setNode(node.id, { width, height });
   });
 
-  // Separate spouse relations and regular parent-child lines
-  const spouseEdges = edges.filter(
+  // Filter edges to only those connecting valid registered nodes in the graph
+  const validEdges = edges.filter(
+    (e) => dagreGraph.hasNode(e.source) && dagreGraph.hasNode(e.target)
+  );
+
+  // Normalize parent-child and adopted edges so that the parent is always the source and the child is the target
+  // based on edge handle identifiers (e.g. child-out is on the parent, parent-in is on the child).
+  // This guarantees that parents are always placed above children regardless of how the line was drawn.
+  const normalizedEdges = validEdges.map((e) => {
+    if (e.data?.relationType === 'parent' || e.data?.relationType === 'adopted') {
+      const isReversed = e.sourceHandle?.includes('parent-in') || e.targetHandle?.includes('child-out');
+      if (isReversed) {
+        return {
+          ...e,
+          source: e.target,
+          target: e.source,
+          sourceHandle: e.targetHandle,
+          targetHandle: e.sourceHandle,
+        };
+      }
+    }
+    return e;
+  });
+
+  // Separate spouse, sibling, and regular parent-child lines
+  const spouseEdges = normalizedEdges.filter(
     (e) => e.data?.relationType === 'spouse' || e.sourceHandle?.includes('partner')
   );
-  const regularEdges = edges.filter(
-    (e) => e.data?.relationType !== 'spouse' && !e.sourceHandle?.includes('partner')
+  const siblingEdges = normalizedEdges.filter(
+    (e) => e.data?.relationType === 'sibling'
+  );
+  const regularEdges = normalizedEdges.filter(
+    (e) => e.data?.relationType !== 'spouse' && e.data?.relationType !== 'sibling' && !e.sourceHandle?.includes('partner')
   );
 
   const processedSpouses = new Set<string>();
@@ -68,15 +95,24 @@ const runHierarchicalLayout = (
     dagreGraph.setEdge(edge.source, virtualUnionId);
     dagreGraph.setEdge(edge.target, virtualUnionId);
 
-    // Route children so they stem out of the virtual union node
-    regularEdges.forEach((regEdge) => {
-      if (regEdge.source === edge.source || regEdge.source === edge.target) {
-        dagreGraph.setEdge(virtualUnionId, regEdge.target);
-      }
+    // Route children so they stem out of the virtual union node (works for both biological parent and adopted relationships!)
+    // Sort siblings horizontally based on user connection direction (source sibling connects left -> target sibling connects right)
+    const unionChildren = regularEdges
+      .filter((regEdge) => regEdge.source === edge.source || regEdge.source === edge.target)
+      .map((regEdge) => regEdge.target);
+
+    unionChildren.sort((childA, childB) => {
+      if (siblingEdges.some((se) => se.source === childA && se.target === childB)) return -1;
+      if (siblingEdges.some((se) => se.source === childB && se.target === childA)) return 1;
+      return 0;
+    });
+
+    unionChildren.forEach((childId) => {
+      dagreGraph.setEdge(virtualUnionId, childId);
     });
   });
 
-  // Add the remaining parent-child/sibling relations not connected directly to unions
+  // Add the remaining parent-child/adopted relations not connected directly to unions
   regularEdges.forEach((edge) => {
     if (!dagreGraph.hasEdge(edge.source, edge.target)) {
       const parentIsSpouse = spouseEdges.some(se => se.source === edge.source || se.target === edge.source);
@@ -86,18 +122,88 @@ const runHierarchicalLayout = (
     }
   });
 
+  // Sibling connections are omitted from the Dagre graph to prevent cyclical constraints or ranking conflicts (Dagre naturally aligns them on the same rank because they share the same parent virtual union node). React Flow will draw the visual sibling lines cleanly between them.
+
   // Calculate coordinates using Dagre
   dagre.layout(dagreGraph);
 
   // Extract center coordinates, adjusting to top-left origin for React Flow using node dimensions
-  return nodes.map((node) => {
+  // 1. Group nodes by their Dagre Y rank coordinate
+  const nodesByRank = new Map<number, typeof nodes>();
+  nodes.forEach((node) => {
     const dagreNode = dagreGraph.node(node.id);
-    const width = node.measured?.width || NODE_WIDTH;
-    const height = node.measured?.height || NODE_HEIGHT;
+    if (!dagreNode) return;
+    const rankY = Math.round(dagreNode.y);
+    if (!nodesByRank.has(rankY)) {
+      nodesByRank.set(rankY, []);
+    }
+    nodesByRank.get(rankY)!.push(node);
+  });
+
+  const finalPositions = new Map<string, { x: number; y: number }>();
+
+  // 2. Process each rank group to sort horizontally based on edge handle directions
+  nodesByRank.forEach((rankNodes, rankY) => {
+    if (rankNodes.length <= 1) {
+      rankNodes.forEach((node) => {
+        const dagreNode = dagreGraph.node(node.id);
+        const width = node.measured?.width || NODE_WIDTH;
+        const height = node.measured?.height || NODE_HEIGHT;
+        finalPositions.set(node.id, {
+          x: Math.round(dagreNode.x - width / 2),
+          y: Math.round(dagreNode.y - height / 2),
+        });
+      });
+      return;
+    }
+
+    // Get the X coordinates calculated by Dagre for all nodes in this rank, and sort them ascending
+    const sortedXCoords = rankNodes
+      .map((node) => Math.round(dagreGraph.node(node.id).x))
+      .sort((a, b) => a - b);
+
+    // Clone rankNodes to sort them horizontally based on edge handle direction constraints
+    const sortedNodes = [...rankNodes];
+    sortedNodes.sort((nodeA, nodeB) => {
+      // Find any edge connecting nodeA and nodeB
+      const edge = validEdges.find(
+        (e) => (e.source === nodeA.id && e.target === nodeB.id) || (e.source === nodeB.id && e.target === nodeA.id)
+      );
+      if (!edge) return 0;
+
+      const isSrcA = edge.source === nodeA.id;
+      const srcHandle = edge.sourceHandle || '';
+      const tgtHandle = edge.targetHandle || '';
+
+      if (isSrcA) {
+        // A -> B
+        if (srcHandle.includes('right') || tgtHandle.includes('left')) return -1; // A should be on the left
+        if (srcHandle.includes('left') || tgtHandle.includes('right')) return 1;  // A should be on the right
+      } else {
+        // B -> A
+        if (srcHandle.includes('right') || tgtHandle.includes('left')) return 1;  // B on the left (A on the right)
+        if (srcHandle.includes('left') || tgtHandle.includes('right')) return -1; // B on the right (A on the left)
+      }
+      return 0;
+    });
+
+    // Assign the sorted X coordinates to the sorted nodes
+    sortedNodes.forEach((node, idx) => {
+      const width = node.measured?.width || NODE_WIDTH;
+      const height = node.measured?.height || NODE_HEIGHT;
+      finalPositions.set(node.id, {
+        x: sortedXCoords[idx] - Math.round(width / 2),
+        y: rankY - Math.round(height / 2),
+      });
+    });
+  });
+
+  return nodes.map((node) => {
+    const pos = finalPositions.get(node.id) || { x: node.position.x, y: node.position.y };
     return {
       id: node.id,
-      x: Math.round(dagreNode.x - width / 2),
-      y: Math.round(dagreNode.y - height / 2),
+      x: pos.x,
+      y: pos.y,
     };
   });
 };

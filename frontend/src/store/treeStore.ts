@@ -63,7 +63,7 @@ interface TreeState {
   updateTree: (token: string, treeId: string, data: Partial<Tree>) => Promise<Tree | null>;
   importTree: (token: string, jsonData: string) => Promise<Tree | null>;
   deleteTree: (token: string, treeId: string) => Promise<void>;
-  addPerson: (token: string, data: Omit<Person, 'id'>) => Promise<void>;
+  addPerson: (token: string, data: Omit<Person, 'id'>) => Promise<Person | null>;
   updatePerson: (token: string, personId: string, data: Partial<Person>) => Promise<void>;
   deletePerson: (token: string, personId: string) => Promise<void>;
   addRelationship: (token: string, data: Omit<Relationship, 'id'> & { tree_id: string }) => Promise<void>;
@@ -252,8 +252,10 @@ export const useTreeStore = create<TreeState>((set, get) => ({
           },
         });
       }
+      return newPerson;
     } catch (err: any) {
       set({ error: err.message });
+      return null;
     }
   },
 

@@ -610,10 +610,11 @@ function TreeWorkspace() {
         },
       };
 
+      let createdPerson = null;
       if (editingPerson) {
         await updatePerson(token, editingPerson.id, payload as any);
       } else {
-        await addPerson(token, payload as any);
+        createdPerson = await addPerson(token, payload as any);
       }
 
       // Reset Form
@@ -626,12 +627,26 @@ function TreeWorkspace() {
       setBiography('');
       setDynamicData({});
       setShowPersonModal(false);
+
+      // Smoothly focus/zoom onto the newly created family member node
+      if (createdPerson && createdPerson.id) {
+        const newId = createdPerson.id;
+        setTimeout(() => {
+          fitView({
+            nodes: [{ id: newId }],
+            duration: 1000,
+            maxZoom: 1.2,
+            padding: 0.5
+          });
+        }, 300);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setSubmittingPerson(false);
     }
   };
+
 
   const handleRelationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1326,6 +1341,8 @@ function TreeWorkspace() {
           onEdgeMouseLeave={() => setHoveredEdgeId(null)}
           nodeTypes={nodeTypes}
           reconnectRadius={30} // Vastly increases hit target radius for dragging/reconnecting lines on mobile devices (React Flow v12 API)
+          minZoom={0.05} // Allows limitless zoom-out on small mobile displays to fit large family trees
+          maxZoom={2} // Allows clear close-up zoom-in
           fitView
           className={`transition-colors duration-300 ${isDarkMode ? 'bg-[#121213]' : 'bg-[#faf9f6]'}`}
         >
@@ -1505,7 +1522,7 @@ function TreeWorkspace() {
                   }`}
                 >
                   {submittingPerson && (
-                    <div className={`animate-spin rounded-full h-3.5 w-3.5 border-b-2 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`} />
+                    <div className={`animate-spin rounded-full h-3.5 w-3.5 border-2 border-t-transparent ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`} />
                   )}
                   {submittingPerson ? (editingPerson ? 'Saving...' : 'Creating...') : (editingPerson ? 'Save Changes' : 'Create Member')}
                 </button>
@@ -1569,7 +1586,7 @@ function TreeWorkspace() {
                   }`}
                 >
                   {submittingRelation && (
-                    <div className={`animate-spin rounded-full h-3.5 w-3.5 border-b-2 ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`} />
+                    <div className={`animate-spin rounded-full h-3.5 w-3.5 border-2 border-t-transparent ${isDarkMode ? 'border-[#1c1c1e]' : 'border-white'}`} />
                   )}
                   {submittingRelation ? 'Linking...' : 'Add Relationship'}
                 </button>
