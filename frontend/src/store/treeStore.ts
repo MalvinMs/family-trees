@@ -67,6 +67,7 @@ interface TreeState {
   updatePerson: (token: string, personId: string, data: Partial<Person>) => Promise<void>;
   deletePerson: (token: string, personId: string) => Promise<void>;
   addRelationship: (token: string, data: Omit<Relationship, 'id'> & { tree_id: string }) => Promise<void>;
+  updateRelationship: (token: string, relationshipId: string, data: { source_handle?: string | null; target_handle?: string | null }) => Promise<void>;
   deleteRelationship: (token: string, relationshipId: string) => Promise<void>;
   addCustomField: (token: string, treeId: string, name: string, type: string) => Promise<void>;
   fetchCollaborators: (token: string, treeId: string) => Promise<void>;
@@ -84,6 +85,7 @@ interface TreeState {
   deletePersonLocal: (personId: string) => void;
   addRelationshipLocal: (relationship: Relationship) => void;
   deleteRelationshipLocal: (relationshipId: string) => void;
+  updateRelationshipLocal: (relationshipId: string, data: Partial<Relationship>) => void;
   updateMultipleNodesPositionsLocal: (positions: { id: string; x: number; y: number }[]) => void;
   saveBulkPositions: (token: string, treeId: string, positions: { id: string; x: number; y: number }[]) => Promise<void>;
 }
@@ -331,6 +333,39 @@ export const useTreeStore = create<TreeState>((set, get) => ({
           activeTree: {
             ...activeTree,
             relationships: [...activeTree.relationships, newRelationship],
+          },
+        });
+      }
+    } catch (err: any) {
+      set({ error: err.message });
+      throw err;
+    }
+  },
+
+  updateRelationship: async (token, relationshipId, data) => {
+    try {
+      const res = await fetch(`${API_URL}/api/relationships/${relationshipId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to update relationship');
+      }
+
+      const updatedRelationship = await res.json();
+      const activeTree = get().activeTree;
+      if (activeTree) {
+        const updatedRels = activeTree.relationships.map((r) =>
+          r.id === relationshipId ? updatedRelationship : r
+        );
+        set({
+          activeTree: {
+            ...activeTree,
+            relationships: updatedRels,
           },
         });
       }
@@ -625,6 +660,21 @@ export const useTreeStore = create<TreeState>((set, get) => ({
           relationships: activeTree.relationships.filter(
             (r) => r.id !== relationshipId
           ),
+        },
+      });
+    }
+  },
+
+  updateRelationshipLocal: (relationshipId, data) => {
+    const activeTree = get().activeTree;
+    if (activeTree) {
+      const updatedRels = activeTree.relationships.map((r) =>
+        r.id === relationshipId ? { ...r, ...data } : r
+      );
+      set({
+        activeTree: {
+          ...activeTree,
+          relationships: updatedRels,
         },
       });
     }

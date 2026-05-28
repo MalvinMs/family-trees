@@ -77,7 +77,7 @@ class TreeController extends Controller
                     ]);
                 },
                 'relationships' => function ($query) {
-                    $query->select(['id', 'tree_id', 'person_a', 'person_b', 'relation_type']);
+                    $query->select(['id', 'tree_id', 'person_a', 'person_b', 'relation_type', 'source_handle', 'target_handle']);
                 },
                 'customFields'
             ])
@@ -101,7 +101,7 @@ class TreeController extends Controller
                     ]);
                 },
                 'relationships' => function ($query) {
-                    $query->select(['id', 'tree_id', 'person_a', 'person_b', 'relation_type']);
+                    $query->select(['id', 'tree_id', 'person_a', 'person_b', 'relation_type', 'source_handle', 'target_handle']);
                 },
                 'customFields'
             ])

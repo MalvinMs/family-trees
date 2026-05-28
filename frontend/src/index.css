@@ -49,3 +49,19 @@ body {
   z-index: 50 !important;
   pointer-events: auto !important;
 }
+
+/* Touch-friendly handles: expand touch hit area by 12px in every direction without changing visual size */
+.react-flow__handle {
+  border: 12px solid transparent !important;
+  background-clip: padding-box !important;
+  box-sizing: content-box !important;
+}
+
+/* Make sure edge updater has grab cursors and generous scaling for smooth mobile drags */
+.react-flow__edgeupdater {
+  cursor: grab !important;
+  opacity: 0.8 !important;
+}
+.react-flow__edgeupdater:active {
+  cursor: grabbing !important;
+}

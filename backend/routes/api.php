@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Relationship Management (Graph link CRUD)
     Route::post('relationships', [RelationshipController::class, 'store']);
+    Route::put('relationships/{id}', [RelationshipController::class, 'update']);
     Route::delete('relationships/{id}', [RelationshipController::class, 'destroy']);
 
     // Custom Fields (Schema customization per tree)

@@ -10,6 +10,7 @@ interface PersonNodeProps {
     onEdit: (person: Person) => void;
     onDelete: (id: string) => void;
     isDarkMode?: boolean;
+    opacity?: number;
   };
 }
 
@@ -33,6 +34,7 @@ function PersonNode({ id: _id, selected, data }: PersonNodeProps) {
 
   return (
     <div
+      style={{ opacity: data.opacity ?? 1 }}
       className={`group px-6 py-5 rounded-2xl border ${genderBorder} shadow-xs min-w-[210px] transition-all duration-300 hover:shadow-md hover:scale-[1.01] ${
         isDarkMode
           ? 'bg-[#1a1a1c] text-[#f3f3f5] hover:border-[#2e2e30]'
@@ -133,6 +135,7 @@ export default memo(PersonNode, (prevProps, nextProps) => {
     prevProps.id === nextProps.id &&
     prevProps.selected === nextProps.selected &&
     prevProps.data.isDarkMode === nextProps.data.isDarkMode &&
+    prevProps.data.opacity === nextProps.data.opacity &&
     prevProps.data.person.first_name === nextProps.data.person.first_name &&
     prevProps.data.person.last_name === nextProps.data.person.last_name &&
     prevProps.data.person.gender === nextProps.data.person.gender &&

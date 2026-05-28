@@ -7,6 +7,9 @@ import {
   Background,
   useNodesState,
   useEdgesState,
+  reconnectEdge,
+  ReactFlowProvider,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -15,14 +18,14 @@ import '@xyflow/react/dist/style.css';
 import { useAuthStore } from '../../../store/authStore';
 import { useTreeStore } from '../../../store/treeStore';
 import type { Person, Relationship } from '../../../store/treeStore';
-import { ArrowLeft, UserPlus, Settings, Trash2, Sun, Moon, X, Clock, AlignLeft, MessageSquare, Send, History, Users, Download, Globe, Copy, Check, Menu, Sparkles, Pencil } from 'lucide-react';
+import { ArrowLeft, UserPlus, Settings, Trash2, Sun, Moon, X, Clock, AlignLeft, MessageSquare, Send, History, Users, Download, Globe, Copy, Check, Menu, Sparkles, Pencil, Layers, Activity, ArrowRight } from 'lucide-react';
 import PersonNode from '../../components/PersonNode';
 import DeleteTreeModal from '../../components/dashboard/DeleteTreeModal';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
-import { getAutoLayoutedNodes } from '../../utils/layoutUtils';
+import { getAutoLayoutedNodes, type LayoutAlgorithmType } from '../../utils/layoutUtils';
 
-export default function TreeWorkspacePage() {
+function TreeWorkspace() {
   const { id } = useParams() as { id: string };
   const { token, initialize, isAuthenticated, user } = useAuthStore();
   const {
@@ -32,6 +35,7 @@ export default function TreeWorkspacePage() {
     updatePerson,
     deletePerson,
     addRelationship,
+    updateRelationship,
     deleteRelationship,
     addCustomField,
     collaborators,
@@ -60,11 +64,14 @@ export default function TreeWorkspacePage() {
   } = useTreeStore();
 
   const navigate = useNavigate();
+  const { fitView } = useReactFlow();
 
   const [copiedLink, setCopiedLink] = useState(false);
   const [isEditingTreeName, setIsEditingTreeName] = useState(false);
   const [treeNameInput, setTreeNameInput] = useState('');
   const [savingTreeName, setSavingTreeName] = useState(false);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -105,6 +112,7 @@ export default function TreeWorkspacePage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showAutoArrangeMenu, setShowAutoArrangeMenu] = useState(false);
   const [submittingPerson, setSubmittingPerson] = useState(false);
   const [submittingRelation, setSubmittingRelation] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
@@ -271,18 +279,49 @@ export default function TreeWorkspacePage() {
   useEffect(() => {
     if (!activeTree) return;
 
+    const hasActiveHover = hoveredNodeId !== null || hoveredEdgeId !== null;
+
+    // Helper: Determine if a person node is related to the hovered element
+    const isNodeHighlighted = (personId: string) => {
+      if (!hasActiveHover) return true; // Default: no hover = all highlighted
+      
+      if (hoveredEdgeId !== null) {
+        // If an edge is hovered, only its source and target nodes are highlighted
+        const edge = activeTree.relationships.find((r) => r.id === hoveredEdgeId);
+        if (edge) {
+          return edge.person_a === personId || edge.person_b === personId;
+        }
+      }
+
+      if (hoveredNodeId !== null) {
+        // If a node is hovered, it and its direct relatives are highlighted
+        if (personId === hoveredNodeId) return true;
+        return activeTree.relationships.some(
+          (r) =>
+            (r.person_a === hoveredNodeId && r.person_b === personId) ||
+            (r.person_b === hoveredNodeId && r.person_a === personId)
+        );
+      }
+
+      return false;
+    };
+
     // Map Persons to React Flow Nodes
-    const flowNodes: Node[] = activeTree.persons.map((person) => ({
-      id: person.id,
-      type: 'personNode',
-      position: { x: person.ui_metadata?.x || 100, y: person.ui_metadata?.y || 100 },
-      data: {
-        person,
-        onEdit: handleEditPersonClick,
-        onDelete: handleDeletePersonClick,
-        isDarkMode,
-      },
-    }));
+    const flowNodes: Node[] = activeTree.persons.map((person) => {
+      const isHighlighted = isNodeHighlighted(person.id);
+      return {
+        id: person.id,
+        type: 'personNode',
+        position: { x: person.ui_metadata?.x || 100, y: person.ui_metadata?.y || 100 },
+        data: {
+          person,
+          onEdit: handleEditPersonClick,
+          onDelete: handleDeletePersonClick,
+          isDarkMode,
+          opacity: isHighlighted ? 1.0 : 0.25,
+        },
+      };
+    });
 
     // Map Relationships to React Flow Edges
     const flowEdges: Edge[] = activeTree.relationships.map((rel) => {
@@ -304,6 +343,28 @@ export default function TreeWorkspacePage() {
         strokeDash = '3 3';
       }
 
+      // Highlight logic for edges
+      let isHighlighted = false;
+      let opacity = 1.0;
+      let strokeWidth = 1.5;
+
+      if (hasActiveHover) {
+        if (hoveredEdgeId !== null && rel.id === hoveredEdgeId) {
+          isHighlighted = true;
+        } else if (hoveredNodeId !== null && (rel.person_a === hoveredNodeId || rel.person_b === hoveredNodeId)) {
+          isHighlighted = true;
+        }
+
+        if (isHighlighted) {
+          strokeWidth = hoveredEdgeId !== null ? 3.5 : 3.0;
+          animated = true;
+        } else {
+          opacity = 0.15;
+          strokeWidth = 1.0;
+          animated = false;
+        }
+      }
+
       return {
         id: rel.id,
         source: rel.person_a,
@@ -311,15 +372,16 @@ export default function TreeWorkspacePage() {
         sourceHandle: rel.source_handle || (rel.relation_type === 'spouse' ? 'partner-left' : 'child-out'),
         targetHandle: rel.target_handle || (rel.relation_type === 'spouse' ? 'partner-right' : 'parent-in'),
         animated,
-        style: { stroke: strokeColor, strokeWidth: 1.5, strokeDasharray: strokeDash }, // Thin minimalist custom colors
+        style: { stroke: strokeColor, strokeWidth, strokeDasharray: strokeDash, opacity, transition: 'all 0.3s ease' },
         type: 'smoothstep',
         data: { relationType: rel.relation_type },
+        interactionWidth: 24, // Greatly improves touch target hitboxes on mobile devices
       };
     });
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [activeTree, isDarkMode]);
+  }, [activeTree, isDarkMode, hoveredNodeId, hoveredEdgeId]);
 
   // Simple custom debounce helper to save coordinate updates after drag settles
   const debouncedUpdateCoords = useMemo(() => {
@@ -387,6 +449,37 @@ export default function TreeWorkspacePage() {
     [token]
   );
 
+  // Reconnect Handler (Interactive dragging & reconnecting lines to different handles)
+  const onReconnect = useCallback(
+    async (oldEdge: Edge, newConnection: Connection) => {
+      if (!token || !id) return;
+
+      const oldRel = activeTree?.relationships.find((r) => r.id === oldEdge.id);
+      if (!oldRel) return;
+
+      // 1. Optimistic instant local update on the canvas (60 FPS)
+      setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
+
+      // 2. Resolve fallback values to ensure handles do not reset to defaults
+      const fallbackSourceHandle = oldRel.source_handle || (oldRel.relation_type === 'spouse' ? 'partner-left' : 'child-out');
+      const fallbackTargetHandle = oldRel.target_handle || (oldRel.relation_type === 'spouse' ? 'partner-right' : 'parent-in');
+
+      const finalSourceHandle = newConnection.sourceHandle || fallbackSourceHandle;
+      const finalTargetHandle = newConnection.targetHandle || fallbackTargetHandle;
+
+      try {
+        // 3. Make direct PUT request to update relationship handles on the backend
+        await updateRelationship(token, oldEdge.id, {
+          source_handle: finalSourceHandle,
+          target_handle: finalTargetHandle,
+        });
+      } catch (err) {
+        console.error('Failed to reconnect relationship line:', err);
+      }
+    },
+    [token, id, activeTree, updateRelationship, setEdges]
+  );
+
   // Track connection drag state for Excalidraw-style drop-anywhere behaviour
   const onConnectStart = useCallback(() => {
     setIsConnecting(true);
@@ -397,16 +490,16 @@ export default function TreeWorkspacePage() {
   }, []);
 
   // Auto-Layout: compute Dagre positions, patch local canvas, persist to DB
-  const handleTriggerAutoLayout = useCallback(async () => {
+  const handleTriggerAutoLayout = useCallback(async (algorithm: LayoutAlgorithmType) => {
     if (!activeTree || !token || nodes.length === 0) return;
 
     setConfirmDialog({
       show: true,
       title: 'Auto-Arrange Family Tree',
-      message: 'Automatically re-arrange all family nodes into a clean generational hierarchy? This will reposition all cards and save to the database.',
+      message: `Automatically re-arrange all family nodes using the selected layout? This will reposition all cards and save to the database.`,
       onConfirm: async () => {
-        // 1. Calculate optimal positions using Dagre
-        const newPositions = getAutoLayoutedNodes(nodes, edges, 'TB');
+        // 1. Calculate optimal positions based on selected algorithm
+        const newPositions = getAutoLayoutedNodes(nodes, edges, algorithm);
 
         // 2. Instant optimistic local update (60 FPS, no flicker)
         updateMultipleNodesPositionsLocal(newPositions);
@@ -419,9 +512,14 @@ export default function TreeWorkspacePage() {
 
         // 3. Persist to PostgreSQL and broadcast to collaborators via Reverb
         await saveBulkPositions(token, activeTree.id, newPositions);
+
+        // 4. Animate view focus smoothly
+        setTimeout(() => {
+          fitView({ duration: 800, padding: 0.2 });
+        }, 100);
       },
     });
-  }, [activeTree, token, nodes, edges, updateMultipleNodesPositionsLocal, saveBulkPositions, setNodes]);
+  }, [activeTree, token, nodes, edges, updateMultipleNodesPositionsLocal, saveBulkPositions, setNodes, fitView]);
 
   // Edge Deletion Handler (When user clicks a line and presses Backspace/Delete on keyboard)
   const onEdgesDelete = useCallback(
@@ -834,18 +932,62 @@ export default function TreeWorkspacePage() {
             </button>
 
             {/* Auto-Arrange Layout Button */}
-            <button
-              onClick={handleTriggerAutoLayout}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border shadow-xl transition-all text-xs font-semibold pointer-events-auto ${
-                isDarkMode
-                  ? 'bg-[#9cb2a2]/10 border-[#9cb2a2]/20 text-[#9cb2a2] hover:bg-[#9cb2a2]/20 hover:text-white'
-                  : 'bg-[#7b8e7f]/10 border-[#7b8e7f]/30 text-[#7b8e7f] hover:bg-[#7b8e7f]/20 hover:text-[#4e6153]'
-              }`}
-              title="Automatically arrange all family nodes into a clean generational hierarchy"
-            >
-              <Sparkles size={14} />
-              <span className="hidden lg:inline">Auto-Arrange</span>
-            </button>
+            <div className="relative pointer-events-auto">
+              <button
+                onClick={() => setShowAutoArrangeMenu((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border shadow-xl transition-all text-xs font-semibold ${
+                  isDarkMode
+                    ? 'bg-[#9cb2a2]/10 border-[#9cb2a2]/20 text-[#9cb2a2] hover:bg-[#9cb2a2]/20 hover:text-white'
+                    : 'bg-[#7b8e7f]/10 border-[#7b8e7f]/30 text-[#7b8e7f] hover:bg-[#7b8e7f]/20 hover:text-[#4e6153]'
+                }`}
+                title="Automatically arrange all family nodes inside the canvas"
+              >
+                <Sparkles size={14} />
+                <span className="hidden lg:inline">Auto-Arrange</span>
+              </button>
+              {showAutoArrangeMenu && (
+                <div className={`absolute right-0 mt-2 w-52 rounded-xl shadow-2xl border overflow-hidden z-50 transition-all ${
+                  isDarkMode ? 'bg-[#18181a] border-white/5 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
+                }`}>
+                  <button
+                    onClick={() => {
+                      handleTriggerAutoLayout('HIERARCHICAL_TB');
+                      setShowAutoArrangeMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2 text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                      isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <Layers size={13} className="text-indigo-400" />
+                    Vertical Generation Tree
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleTriggerAutoLayout('HIERARCHICAL_LR');
+                      setShowAutoArrangeMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2 text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                      isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <ArrowRight size={13} className="text-emerald-400" />
+                    Horizontal Timeline
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleTriggerAutoLayout('ORGANIC');
+                      setShowAutoArrangeMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2 text-left px-4 py-3 text-xs font-medium border-b last:border-0 transition-colors ${
+                      isDarkMode ? 'border-white/5 hover:bg-white/5 hover:text-white' : 'border-slate-100 hover:bg-slate-50 hover:text-slate-950'
+                    }`}
+                  >
+                    <Activity size={13} className="text-rose-400" />
+                    Organic Dynamic Space
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Export Dropdown */}
             <div className="relative pointer-events-auto">
@@ -1061,18 +1203,48 @@ export default function TreeWorkspacePage() {
               </button>
 
               <div className={`border-t my-1 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`} />
+              
+              <div className="px-3 py-1.5 text-[9px] font-mono tracking-widest uppercase font-semibold text-slate-400">
+                Auto-Arrange Options
+              </div>
 
               <button
                 onClick={() => {
-                  handleTriggerAutoLayout();
+                  handleTriggerAutoLayout('HIERARCHICAL_TB');
                   setShowMobileMenu(false);
                 }}
-                className={`flex items-center gap-2.5 w-full text-left px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${
-                  isDarkMode ? 'text-[#9cb2a2] hover:bg-white/5 hover:text-white' : 'text-[#7b8e7f] hover:bg-slate-100 hover:text-slate-955'
+                className={`flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'text-indigo-400 hover:bg-white/5 hover:text-white' : 'text-indigo-650 hover:bg-slate-100 hover:text-slate-955'
                 }`}
               >
-                <Sparkles size={14} />
-                Auto-Arrange
+                <Layers size={14} />
+                Vertical Generation Tree
+              </button>
+
+              <button
+                onClick={() => {
+                  handleTriggerAutoLayout('HIERARCHICAL_LR');
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'text-emerald-400 hover:bg-white/5 hover:text-white' : 'text-emerald-650 hover:bg-slate-100 hover:text-slate-955'
+                }`}
+              >
+                <ArrowRight size={14} />
+                Horizontal Timeline
+              </button>
+
+              <button
+                onClick={() => {
+                  handleTriggerAutoLayout('ORGANIC');
+                  setShowMobileMenu(false);
+                }}
+                className={`flex items-center gap-2.5 w-full text-left px-4 py-2 text-xs font-semibold rounded-lg transition-colors ${
+                  isDarkMode ? 'text-rose-400 hover:bg-white/5 hover:text-white' : 'text-rose-650 hover:bg-slate-100 hover:text-slate-955'
+                }`}
+              >
+                <Activity size={14} />
+                Organic Dynamic Space
               </button>
 
               <button
@@ -1139,13 +1311,21 @@ export default function TreeWorkspacePage() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onReconnect={onReconnect}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
+          onReconnectStart={onConnectStart}
+          onReconnectEnd={onConnectEnd}
           onNodeDrag={onNodeDrag}
           onNodeDragStop={onNodeDragStop}
           onEdgesDelete={onEdgesDelete}
           onNodeClick={onNodeClick}
+          onNodeMouseEnter={(_, node) => setHoveredNodeId(node.id)}
+          onNodeMouseLeave={() => setHoveredNodeId(null)}
+          onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+          onEdgeMouseLeave={() => setHoveredEdgeId(null)}
           nodeTypes={nodeTypes}
+          reconnectRadius={30} // Vastly increases hit target radius for dragging/reconnecting lines on mobile devices (React Flow v12 API)
           fitView
           className={`transition-colors duration-300 ${isDarkMode ? 'bg-[#121213]' : 'bg-[#faf9f6]'}`}
         >
@@ -1266,37 +1446,41 @@ export default function TreeWorkspacePage() {
               </div>
 
               {/* Dynamic Field Form Inputs */}
-              {activeTree?.customFields && activeTree.customFields.length > 0 && (
-                <div className={`border-t pt-4 mt-4 space-y-4 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
-                  <h4 className={`text-xs font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#9cb2a2]' : 'text-[#7b8e7f]'}`}>
-                    Custom Metadata Columns
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    {activeTree.customFields.map((field) => (
-                      <div key={field.id}>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                          {field.field_name.replace('_', ' ')}
-                        </label>
-                        <input
-                          type={field.field_type === 'date' ? 'date' : 'text'}
-                          value={dynamicData[field.field_name] || ''}
-                          onChange={(e) =>
-                            setDynamicData({
-                              ...dynamicData,
-                              [field.field_name]: e.target.value,
-                            })
-                          }
-                          className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
-                            isDarkMode
-                              ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
-                              : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
-                          }`}
-                        />
-                      </div>
-                    ))}
+              {(() => {
+                const customFields = activeTree?.customFields || (activeTree as any)?.custom_fields;
+                if (!customFields || customFields.length === 0) return null;
+                return (
+                  <div className={`border-t pt-4 mt-4 space-y-4 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
+                    <h4 className={`text-xs font-bold uppercase tracking-widest ${isDarkMode ? 'text-[#9cb2a2]' : 'text-[#7b8e7f]'}`}>
+                      Custom Metadata Columns
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      {customFields.map((field: any) => (
+                        <div key={field.id}>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            {field.field_name.replace('_', ' ')}
+                          </label>
+                          <input
+                            type={field.field_type === 'date' ? 'date' : 'text'}
+                            value={dynamicData[field.field_name] || ''}
+                            onChange={(e) =>
+                              setDynamicData({
+                                ...dynamicData,
+                                [field.field_name]: e.target.value,
+                              })
+                            }
+                            className={`w-full px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-sm ${
+                              isDarkMode
+                                ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                                : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                            }`}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className={`flex items-center justify-end gap-3 pt-4 border-t mt-6 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
                 <button
@@ -2087,8 +2271,8 @@ export default function TreeWorkspacePage() {
 
       {/* Mobile Relationship Deletion Control Panel */}
       {selectedEdge && (
-        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20 shadow-2xl border px-4 py-2.5 rounded-full flex items-center gap-3 backdrop-blur bg-white/95 dark:bg-slate-900/90 border-slate-200 dark:border-white/10 text-xs font-medium animate-bounce pointer-events-auto">
-          <span className="text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[9px] font-bold">Lineage Union Selected</span>
+        <div className="absolute bottom-20 md:bottom-8 left-1/2 transform -translate-x-1/2 z-40 shadow-2xl border px-4 py-2.5 rounded-full flex items-center gap-3 backdrop-blur bg-white/95 dark:bg-slate-900/90 border-slate-200 dark:border-white/10 text-xs font-medium pointer-events-auto">
+          <span className="hidden xs:inline text-slate-500 dark:text-slate-400 uppercase tracking-widest text-[9px] font-bold">Union</span>
           <button
             onClick={() => {
               setConfirmDialog({
@@ -2184,5 +2368,13 @@ export default function TreeWorkspacePage() {
         deleting={deleting}
       />
     </main>
+  );
+}
+
+export default function TreeWorkspacePage() {
+  return (
+    <ReactFlowProvider>
+      <TreeWorkspace />
+    </ReactFlowProvider>
   );
 }

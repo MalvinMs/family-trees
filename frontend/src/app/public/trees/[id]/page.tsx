@@ -29,6 +29,8 @@ export default function PublicTreeWorkspacePage() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
 
   // Register Custom Node Type
   const nodeTypes = useMemo(() => ({
@@ -54,8 +56,36 @@ export default function PublicTreeWorkspacePage() {
   useEffect(() => {
     if (!activeTree) return;
 
+    const hasActiveHover = hoveredNodeId !== null || hoveredEdgeId !== null;
+
+    // Helper: Determine if a person node is related to the hovered element
+    const isNodeHighlighted = (personId: string) => {
+      if (!hasActiveHover) return true; // Default: no hover = all highlighted
+      
+      if (hoveredEdgeId !== null) {
+        // If an edge is hovered, only its source and target nodes are highlighted
+        const edge = activeTree.relationships.find((r) => r.id === hoveredEdgeId);
+        if (edge) {
+          return edge.person_a === personId || edge.person_b === personId;
+        }
+      }
+
+      if (hoveredNodeId !== null) {
+        // If a node is hovered, it and its direct relatives are highlighted
+        if (personId === hoveredNodeId) return true;
+        return activeTree.relationships.some(
+          (r) =>
+            (r.person_a === hoveredNodeId && r.person_b === personId) ||
+            (r.person_b === hoveredNodeId && r.person_a === personId)
+        );
+      }
+
+      return false;
+    };
+
     const flowNodes = activeTree.persons.map((person) => {
       const position = person.ui_metadata || { x: Math.random() * 300, y: Math.random() * 300 };
+      const isHighlighted = isNodeHighlighted(person.id);
       return {
         id: person.id,
         type: 'personNode',
@@ -65,6 +95,7 @@ export default function PublicTreeWorkspacePage() {
           onEdit: () => {}, // Disable editing actions
           onDelete: () => {},
           isDarkMode,
+          opacity: isHighlighted ? 1.0 : 0.25,
         },
       };
     });
@@ -88,6 +119,28 @@ export default function PublicTreeWorkspacePage() {
         strokeDash = '3 3';
       }
 
+      // Highlight logic for edges
+      let isHighlighted = false;
+      let opacity = 1.0;
+      let strokeWidth = 1.5;
+
+      if (hasActiveHover) {
+        if (hoveredEdgeId !== null && rel.id === hoveredEdgeId) {
+          isHighlighted = true;
+        } else if (hoveredNodeId !== null && (rel.person_a === hoveredNodeId || rel.person_b === hoveredNodeId)) {
+          isHighlighted = true;
+        }
+
+        if (isHighlighted) {
+          strokeWidth = hoveredEdgeId !== null ? 3.5 : 3.0;
+          animated = true;
+        } else {
+          opacity = 0.15;
+          strokeWidth = 1.0;
+          animated = false;
+        }
+      }
+
       return {
         id: rel.id,
         source: rel.person_a,
@@ -98,8 +151,10 @@ export default function PublicTreeWorkspacePage() {
         type: 'smoothstep',
         style: {
           stroke: strokeColor,
-          strokeWidth: 1.5,
+          strokeWidth,
           strokeDasharray: strokeDash,
+          opacity,
+          transition: 'all 0.3s ease',
         },
         data: { relationType: rel.relation_type },
       };
@@ -107,7 +162,7 @@ export default function PublicTreeWorkspacePage() {
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [activeTree, isDarkMode, setNodes, setEdges]);
+  }, [activeTree, isDarkMode, setNodes, setEdges, hoveredNodeId, hoveredEdgeId]);
 
   // Handle Node click to load sliding details Drawer
   const onNodeClick = useCallback(
@@ -271,6 +326,10 @@ export default function PublicTreeWorkspacePage() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
+          onNodeMouseEnter={(_, node) => setHoveredNodeId(node.id)}
+          onNodeMouseLeave={() => setHoveredNodeId(null)}
+          onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+          onEdgeMouseLeave={() => setHoveredEdgeId(null)}
           nodeTypes={nodeTypes}
           nodesDraggable={false} // READ-ONLY: Disallow dragging
           nodesConnectable={false} // READ-ONLY: Disallow connections

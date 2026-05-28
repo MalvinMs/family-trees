@@ -101,6 +101,27 @@ class RelationshipController extends Controller
     }
 
     /**
+     * Update the specified relationship (e.g. source/target handles).
+     */
+    public function update(Request $request, string $id)
+    {
+        $relationship = Relationship::findOrFail($id);
+        $this->authorizeEditor($request->user(), $relationship->tree_id);
+
+        $request->validate([
+            'source_handle' => ['nullable', 'string'],
+            'target_handle' => ['nullable', 'string'],
+        ]);
+
+        $relationship->update([
+            'source_handle' => $request->source_handle,
+            'target_handle' => $request->target_handle,
+        ]);
+
+        return response()->json($relationship);
+    }
+
+    /**
      * Remove the specified relationship.
      */
     public function destroy(Request $request, string $id)
