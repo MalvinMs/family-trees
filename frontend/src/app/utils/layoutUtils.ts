@@ -128,74 +128,124 @@ const runHierarchicalLayout = (
   dagre.layout(dagreGraph);
 
   // Extract center coordinates, adjusting to top-left origin for React Flow using node dimensions
-  // 1. Group nodes by their Dagre Y rank coordinate
+  // 1. Group nodes by their Dagre rank index (guarantees perfect generation grouping)
   const nodesByRank = new Map<number, typeof nodes>();
   nodes.forEach((node) => {
     const dagreNode = dagreGraph.node(node.id);
     if (!dagreNode) return;
-    const rankY = Math.round(dagreNode.y);
-    if (!nodesByRank.has(rankY)) {
-      nodesByRank.set(rankY, []);
+    
+    // Group by rank index, falling back to rounded bucket coordinates if rank index is not defined
+    const rankValue = (dagreNode as any).rank !== undefined 
+      ? (dagreNode as any).rank 
+      : (rankdir === 'TB' ? Math.round(dagreNode.y / 60) * 60 : Math.round(dagreNode.x / 60) * 60);
+      
+    if (!nodesByRank.has(rankValue)) {
+      nodesByRank.set(rankValue, []);
     }
-    nodesByRank.get(rankY)!.push(node);
+    nodesByRank.get(rankValue)!.push(node);
   });
 
   const finalPositions = new Map<string, { x: number; y: number }>();
 
-  // 2. Process each rank group to sort horizontally based on edge handle directions
-  nodesByRank.forEach((rankNodes, rankY) => {
-    if (rankNodes.length <= 1) {
+  // 2. Process each rank group
+  nodesByRank.forEach((rankNodes, _rankKey) => {
+    if (rankNodes.length === 0) return;
+
+    if (rankdir === 'TB') {
+      // Find the minimum top Y among all nodes in this rank to perfectly top-align all cards in this generation row
+      let minTopY = Infinity;
+      rankNodes.forEach((node) => {
+        const dagreNode = dagreGraph.node(node.id);
+        const height = node.measured?.height || NODE_HEIGHT;
+        const topY = dagreNode.y - height / 2;
+        if (topY < minTopY) {
+          minTopY = topY;
+        }
+      });
+
+      // Get sorted X coordinates of Dagre node centers in this rank
+      const sortedXCoords = rankNodes
+        .map((node) => Math.round(dagreGraph.node(node.id).x))
+        .sort((a, b) => a - b);
+
+      // Sort nodes horizontally based on relationship handle directions
+      const sortedNodes = [...rankNodes];
+      sortedNodes.sort((nodeA, nodeB) => {
+        const edge = validEdges.find(
+          (e) => (e.source === nodeA.id && e.target === nodeB.id) || (e.source === nodeB.id && e.target === nodeA.id)
+        );
+        if (!edge) return 0;
+
+        const isSrcA = edge.source === nodeA.id;
+        const srcHandle = edge.sourceHandle || '';
+        const tgtHandle = edge.targetHandle || '';
+
+        if (isSrcA) {
+          if (srcHandle.includes('right') || tgtHandle.includes('left')) return -1;
+          if (srcHandle.includes('left') || tgtHandle.includes('right')) return 1;
+        } else {
+          if (srcHandle.includes('right') || tgtHandle.includes('left')) return 1;
+          if (srcHandle.includes('left') || tgtHandle.includes('right')) return -1;
+        }
+        return 0;
+      });
+
+      // Assign perfect horizontal positions and a unified top-aligned Y coordinate
+      sortedNodes.forEach((node, idx) => {
+        const width = node.measured?.width || NODE_WIDTH;
+        finalPositions.set(node.id, {
+          x: sortedXCoords[idx] - Math.round(width / 2),
+          y: Math.round(minTopY),
+        });
+      });
+    } else {
+      // rankdir === 'LR': Align vertically into columns (left-aligned)
+      let minLeftX = Infinity;
       rankNodes.forEach((node) => {
         const dagreNode = dagreGraph.node(node.id);
         const width = node.measured?.width || NODE_WIDTH;
+        const leftX = dagreNode.x - width / 2;
+        if (leftX < minLeftX) {
+          minLeftX = leftX;
+        }
+      });
+
+      // Get sorted Y coordinates of Dagre node centers in this rank
+      const sortedYCoords = rankNodes
+        .map((node) => Math.round(dagreGraph.node(node.id).y))
+        .sort((a, b) => a - b);
+
+      // Sort nodes vertically (same logic as horizontal but mapping to y-axis)
+      const sortedNodes = [...rankNodes];
+      sortedNodes.sort((nodeA, nodeB) => {
+        const edge = validEdges.find(
+          (e) => (e.source === nodeA.id && e.target === nodeB.id) || (e.source === nodeB.id && e.target === nodeA.id)
+        );
+        if (!edge) return 0;
+
+        const isSrcA = edge.source === nodeA.id;
+        const srcHandle = edge.sourceHandle || '';
+        const tgtHandle = edge.targetHandle || '';
+
+        if (isSrcA) {
+          if (srcHandle.includes('bottom') || tgtHandle.includes('top')) return -1;
+          if (srcHandle.includes('top') || tgtHandle.includes('bottom')) return 1;
+        } else {
+          if (srcHandle.includes('bottom') || tgtHandle.includes('top')) return 1;
+          if (srcHandle.includes('top') || tgtHandle.includes('bottom')) return -1;
+        }
+        return 0;
+      });
+
+      // Assign perfect vertical positions and a unified left-aligned X coordinate
+      sortedNodes.forEach((node, idx) => {
         const height = node.measured?.height || NODE_HEIGHT;
         finalPositions.set(node.id, {
-          x: Math.round(dagreNode.x - width / 2),
-          y: Math.round(dagreNode.y - height / 2),
+          x: Math.round(minLeftX),
+          y: sortedYCoords[idx] - Math.round(height / 2),
         });
       });
-      return;
     }
-
-    // Get the X coordinates calculated by Dagre for all nodes in this rank, and sort them ascending
-    const sortedXCoords = rankNodes
-      .map((node) => Math.round(dagreGraph.node(node.id).x))
-      .sort((a, b) => a - b);
-
-    // Clone rankNodes to sort them horizontally based on edge handle direction constraints
-    const sortedNodes = [...rankNodes];
-    sortedNodes.sort((nodeA, nodeB) => {
-      // Find any edge connecting nodeA and nodeB
-      const edge = validEdges.find(
-        (e) => (e.source === nodeA.id && e.target === nodeB.id) || (e.source === nodeB.id && e.target === nodeA.id)
-      );
-      if (!edge) return 0;
-
-      const isSrcA = edge.source === nodeA.id;
-      const srcHandle = edge.sourceHandle || '';
-      const tgtHandle = edge.targetHandle || '';
-
-      if (isSrcA) {
-        // A -> B
-        if (srcHandle.includes('right') || tgtHandle.includes('left')) return -1; // A should be on the left
-        if (srcHandle.includes('left') || tgtHandle.includes('right')) return 1;  // A should be on the right
-      } else {
-        // B -> A
-        if (srcHandle.includes('right') || tgtHandle.includes('left')) return 1;  // B on the left (A on the right)
-        if (srcHandle.includes('left') || tgtHandle.includes('right')) return -1; // B on the right (A on the left)
-      }
-      return 0;
-    });
-
-    // Assign the sorted X coordinates to the sorted nodes
-    sortedNodes.forEach((node, idx) => {
-      const width = node.measured?.width || NODE_WIDTH;
-      const height = node.measured?.height || NODE_HEIGHT;
-      finalPositions.set(node.id, {
-        x: sortedXCoords[idx] - Math.round(width / 2),
-        y: rankY - Math.round(height / 2),
-      });
-    });
   });
 
   return nodes.map((node) => {

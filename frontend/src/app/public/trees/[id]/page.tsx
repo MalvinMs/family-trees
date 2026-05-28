@@ -92,10 +92,9 @@ export default function PublicTreeWorkspacePage() {
         position,
         data: {
           person,
-          onEdit: () => {}, // Disable editing actions
-          onDelete: () => {},
           isDarkMode,
           opacity: isHighlighted ? 1.0 : 0.25,
+          readOnly: true,
         },
       };
     });

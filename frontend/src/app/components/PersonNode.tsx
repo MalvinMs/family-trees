@@ -7,10 +7,11 @@ interface PersonNodeProps {
   selected?: boolean;
   data: {
     person: Person;
-    onEdit: (person: Person) => void;
-    onDelete: (id: string) => void;
+    onEdit?: (person: Person) => void;
+    onDelete?: (id: string) => void;
     isDarkMode?: boolean;
     opacity?: number;
+    readOnly?: boolean;
   };
 }
 
@@ -98,34 +99,36 @@ function PersonNode({ id: _id, selected, data }: PersonNodeProps) {
       )}
 
       {/* Action menu */}
-      <div className={`flex items-center justify-end gap-2 border-t pt-3 mt-4 text-[10px] opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-350 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(person);
-          }}
-          className={`px-2 py-0.5 rounded transition-all ${
-            isDarkMode
-              ? 'bg-white/5 text-slate-300 hover:text-white hover:bg-[#2c2c2e]'
-              : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-          }`}
-        >
-          Edit
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(person.id);
-          }}
-          className={`px-2 py-0.5 rounded transition-all ${
-            isDarkMode
-              ? 'bg-white/5 text-red-400 hover:text-white hover:bg-red-950/20'
-              : 'bg-red-50 text-red-500 hover:text-white hover:bg-red-500'
-          }`}
-        >
-          Delete
-        </button>
-      </div>
+      {!data.readOnly && onEdit && onDelete && (
+        <div className={`flex items-center justify-end gap-2 border-t pt-3 mt-4 text-[10px] opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-350 ${isDarkMode ? 'border-white/5' : 'border-slate-100'}`}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(person);
+            }}
+            className={`px-2 py-0.5 rounded transition-all ${
+              isDarkMode
+                ? 'bg-white/5 text-slate-300 hover:text-white hover:bg-[#2c2c2e]'
+                : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+            }`}
+          >
+            Edit
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(person.id);
+            }}
+            className={`px-2 py-0.5 rounded transition-all ${
+              isDarkMode
+                ? 'bg-white/5 text-red-400 hover:text-white hover:bg-red-950/20'
+                : 'bg-red-50 text-red-500 hover:text-white hover:bg-red-500'
+            }`}
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }

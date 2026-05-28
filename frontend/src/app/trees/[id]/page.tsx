@@ -2028,42 +2028,44 @@ function TreeWorkspace() {
             {/* Invite Collaborator Form */}
             {activeTree?.owner_id === user?.id ? (
               <form onSubmit={handleInviteSubmit} className="space-y-4 mb-6">
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="email"
                     required
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     placeholder="Enter email address..."
-                    className={`flex-1 px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs ${
+                    className={`w-full sm:flex-1 px-3 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs ${
                       isDarkMode
                         ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
                         : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
                     }`}
                   />
-                  <select
-                    value={inviteRole}
-                    onChange={(e: any) => setInviteRole(e.target.value)}
-                    className={`px-2 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs ${
-                      isDarkMode
-                        ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
-                        : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
-                    }`}
-                  >
-                    <option value="viewer">Can View</option>
-                    <option value="editor">Can Edit</option>
-                  </select>
-                  <button
-                    type="submit"
-                    disabled={inviting}
-                    className={`px-4 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center justify-center ${
-                      isDarkMode
-                        ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
-                        : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
-                    }`}
-                  >
-                    {inviting ? 'Inviting...' : 'Invite'}
-                  </button>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    <select
+                      value={inviteRole}
+                      onChange={(e: any) => setInviteRole(e.target.value)}
+                      className={`flex-1 sm:flex-initial px-2 py-2 rounded-lg border transition-colors focus:outline-none focus:ring-1 text-xs ${
+                        isDarkMode
+                          ? 'bg-[#121213] border-[#2c2c2e] text-white focus:border-[#9cb2a2] focus:ring-[#9cb2a2]'
+                          : 'bg-[#faf9f6] border-[#e6e5e0] text-slate-900 focus:border-[#7b8e7f] focus:ring-[#7b8e7f]'
+                      }`}
+                    >
+                      <option value="viewer">Can View</option>
+                      <option value="editor">Can Edit</option>
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={inviting}
+                      className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center justify-center ${
+                        isDarkMode
+                          ? 'bg-[#f3f3f5] text-[#1c1c1e] hover:bg-white'
+                          : 'bg-[#1c1c1e] text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      {inviting ? 'Inviting...' : 'Invite'}
+                    </button>
+                  </div>
                 </div>
               </form>
             ) : (
