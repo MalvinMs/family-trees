@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Laravel\Socialite\Facades\Socialite;
+use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
@@ -109,6 +111,54 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Profile updated successfully',
             'user' => $user,
+        ]);
+    }
+
+    /**
+     * Redirect the user to the Google authentication page.
+     */
+    public function redirectToGoogle()
+    {
+        $url = Socialite::driver('google')->stateless()->redirect()->getTargetUrl();
+        return response()->json(['url' => $url]);
+    }
+
+    /**
+     * Handle the callback from Google.
+     */
+    public function handleGoogleCallback(Request $request)
+    {
+        $request->validate(['code' => 'required|string']);
+
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Invalid credentials from Google OAuth Provider.'], 422);
+        }
+
+        // Find or create user based on verified email
+        $user = User::firstOrCreate(
+            ['email' => $googleUser->getEmail()],
+            [
+                'name' => $googleUser->getName(),
+                'password' => Hash::make(Str::random(24)),
+                'email_verified_at' => now(), // Auto-verify Google Accounts
+            ]
+        );
+
+        // Fill email_verified_at if it's a new or existing user logging in via Google
+        if (!$user->email_verified_at) {
+            $user->email_verified_at = now();
+            $user->save();
+        }
+
+        // Generate Sanctum Access Token
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'user' => $user
         ]);
     }
 }

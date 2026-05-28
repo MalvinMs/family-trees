@@ -20,6 +20,8 @@ use Illuminate\Support\Facades\Broadcast;
 // Public routes
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/auth/google/redirect', [AuthController::class, 'redirectToGoogle']);
+Route::post('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
 Route::get('/public/trees/{id}', [TreeController::class, 'showPublic']);
 
 // Authenticated routes
