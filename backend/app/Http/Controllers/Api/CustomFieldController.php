@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CustomField;
+use App\Models\Tree;
 use Illuminate\Http\Request;
 
 class CustomFieldController extends Controller
@@ -63,6 +64,51 @@ class CustomFieldController extends Controller
         ]);
 
         return response()->json($customField, 201);
+    }
+
+    /**
+     * Update the specified custom field.
+     */
+    public function update(Request $request, string $id)
+    {
+        $request->validate([
+            'field_name' => ['required', 'string', 'max:255'],
+            'validation_rules' => ['nullable', 'array'],
+        ]);
+
+        $customField = CustomField::findOrFail($id);
+        $user = $request->user();
+
+        // Authorize that the user owns the tree or is an editor collaborator
+        $tree = Tree::where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('collaborators', function ($q) use ($user) {
+                        $q->where('user_id', $user->id)->where('role', 'editor');
+                    });
+            })
+            ->findOrFail($customField->tree_id);
+
+        $oldName = $customField->field_name;
+        $newName = $request->field_name;
+
+        // If the custom field key name changed, migrate JSON keys in persons dynamic_data columns
+        if ($newName !== $oldName) {
+            foreach ($tree->persons as $person) {
+                $dynamicData = $person->dynamic_data ?? [];
+                if (array_key_exists($oldName, $dynamicData)) {
+                    $dynamicData[$newName] = $dynamicData[$oldName];
+                    unset($dynamicData[$oldName]);
+                    $person->update(['dynamic_data' => $dynamicData]);
+                }
+            }
+        }
+
+        $customField->update([
+            'field_name' => $newName,
+            'validation_rules' => $request->validation_rules ?? [],
+        ]);
+
+        return response()->json($customField);
     }
 
     /**

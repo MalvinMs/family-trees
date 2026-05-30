@@ -239,14 +239,7 @@ export default function DashboardPage() {
     .slice(0, 3);
 
   // 5. Recent Ancestor Profiles (Show deceased/oldest members dynamically)
-  const recentAncestors = allPersons
-    .filter((p) => p.birth_date)
-    .sort((a, b) => {
-      if (a.death_date && !b.death_date) return -1;
-      if (!a.death_date && b.death_date) return 1;
-      return new Date(b.birth_date!).getTime() - new Date(a.birth_date!).getTime();
-    })
-    .slice(0, 3);
+  const recentAncestors = allPersons.filter((p) => p.birth_date);
 
   // 6. Spousal Unions
   const totalSpousalUnions = trees.reduce(

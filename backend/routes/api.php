@@ -54,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Custom Fields (Schema customization per tree)
     Route::get('custom-fields', [CustomFieldController::class, 'index']);
     Route::post('custom-fields', [CustomFieldController::class, 'store']);
+    Route::put('custom-fields/{id}', [CustomFieldController::class, 'update']);
     Route::delete('custom-fields/{id}', [CustomFieldController::class, 'destroy']);
 
     // Tree Collaborators & Sharing system
